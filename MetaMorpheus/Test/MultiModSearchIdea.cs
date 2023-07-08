@@ -1,18 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.IO;
-using System.Linq;
-using System.Printing;
-using System.Text;
-using System.Threading.Tasks;
-using Easy.Common.Extensions;
-using EngineLayer;
+﻿using EngineLayer;
 using MassSpectrometry;
 using NUnit.Framework;
 using Proteomics;
 using Readers;
-using TaskLayer;
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Windows.Automation.Peers;
 using UsefulProteomicsDatabases;
 
 namespace Test
@@ -56,39 +53,117 @@ namespace Test
         [Test]
         public void Run()
         {
+            List<string> filePaths = new List<string>()
+            {
+                Frac1, Frac1_2, Frac3, Frac4, Frac5, Frac6, Frac7, Frac8
+            };
+
             var psms = PsmTsvReader.ReadTsv(AllPeptidesPsm1, out List<string> warnings);
 
             var filteredPsms = FilterPsm(psms).ToList();
 
             WriteFilteredPsmsToTSV(filteredPsms, @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\example.psmtsv");
-            
+
             var filteredFile =
-                ReadFilteredPsmTSV(new List<string>()
-                {
-                    Frac1, Frac1_2, Frac2, Frac3, Frac4, Frac5, Frac6, Frac7, Frac8
-                });
+                ReadFilteredPsmTSV(@"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\example.psmtsv");
 
             WriteFastaDBFromFilteredPsm(filteredFile,
                 @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\database_example.fasta");
 
-            ExtractScans(filteredFile, Frac1);
+            var scans = ExtractScans(filteredFile, filePaths);
 
-            Console.WriteLine(filteredPsms);
+            CreateMzML(scans, @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\file_example.mzML");
+
+            Console.WriteLine("Done");
 
         }
 
-        public List<MsDataScan> ExtractScans(List<FilteredPsmTSV> psms, string filePath)
+        public static void CreateMzML(List<MsDataScan> scans, string path)
         {
+            SourceFile sourceFile = new SourceFile("no nativeID format", "mzML format",
+                null, null, null);
+
+            //var file = new GenericMsDataFile(scans.ToArray(), sourceFile);
+            //File.Create(path);
+            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(new GenericMsDataFile(scans.ToArray(), sourceFile), path, false);
+        }
+
+        public List<MsDataScan> ExtractScans(List<FilteredPsmTSV> psms, List<string> filePaths)
+        {
+            List<MsDataFile> loadedFiles = new();
+
+            foreach (var file in filePaths)
+            {
+                int worker = 0;
+                int io = 0;
+                ThreadPool.GetAvailableThreads(workerThreads: out worker, completionPortThreads: out io);
+
+                loadedFiles.Add(new ThermoRawFileReader(file).LoadAllStaticData(maxThreads: worker));
+            }
+
+            List<string> fileName = new();
+
+            foreach (var name in loadedFiles)
+            {
+                fileName.Add(name.FilePath);
+            }
+
+            List<Tuple<string, MsDataFile>> tupleList = new();
+
+            for (int i = 0; i < loadedFiles.Count(); i++)
+            {
+                tupleList.Add(new Tuple<string, MsDataFile>(item1: fileName[i], item2: loadedFiles[i]));
+            }
+
+            var dict = tupleList.ToImmutableDictionary(x => x.Item1, x => x.Item2);
+
             List<MsDataScan> scans = new();
 
-            var file = new ThermoRawFileReader(filePath);
-
-            file.LoadAllStaticData();
-            
             foreach (var psm in psms)
             {
-                scans.Add(file.GetOneBasedScan(int.Parse(psm.ScanNumber)));
+                foreach (var item in dict)
+                {
+                    if (item.Value.SourceFile.FileName.Contains(psm.FileName))
+                    {
+                        foreach (var scan in item.Value.Scans)
+                        {
+                            if (scan.OneBasedScanNumber.Equals(int.Parse(psm.ScanNumber)) && scan.MsnOrder == 2)
+                            {
+                                scans.Add(scan);
+                                break;
+                            }
+                        }
+
+                        break;
+                    }
+
+                    //break;
+
+                    //if (item.Value.SourceFile.FileName.Contains(psm.FileName) && item.Value.NumSpectra.Equals(int.Parse(psm.ScanNumber)))
+                    //{
+                    //    scans.Add(item.Value.GetOneBasedScan(int.Parse(psm.ScanNumber)));
+                    //    break;
+                    //}
+                }
             }
+
+            //ImmutableDictionary<string, MsDataFile> files =
+            //    ImmutableDictionary.CreateRange(
+            //        new KeyValuePair<string, MsDataFile>[]
+            //        {
+            //            KeyValuePair.Create("", new ThermoRawFileReader(filePath[0]).LoadAllStaticData())
+            //        }
+            //    );
+
+            //foreach (var path in filePath)
+            //{
+            //    files.Add(new ThermoRawFileReader(path));
+            //}
+
+            //foreach (var psm in psms)
+            //{
+            //    scans.Add(files.GetOneBasedScan(int.Parse(psm.ScanNumber)));
+            //}
 
             return scans;
         }
@@ -101,7 +176,7 @@ namespace Test
             {
                 proteinList.Add(new Protein(
                     sequence: protein.BaseSeq,
-                    accession:protein.ProteinAccession,
+                    accession: protein.ProteinAccession,
                     name: protein.ProteinName,
                     organism: protein.OrganismName
                 ));
@@ -126,6 +201,7 @@ namespace Test
         {
             using (var writer = new StreamWriter(path))
             {
+                //makes this an enum?
                 string header = "File Name\tScan Number\tScore\tBase Sequence\t" +
                                 "Full Sequence\tMods\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
@@ -136,7 +212,7 @@ namespace Test
                 {
                     string[] row = new[]
                     {
-                        psm.FileNameWithoutExtension,
+                        String.Join('_',psm.FileNameWithoutExtension.Split('_').SkipLast(1)),
                         psm.Ms2ScanNumber.ToString(),
                         psm.PrecursorScanNum.ToString(),
                         psm.Score.ToString(),
@@ -156,25 +232,21 @@ namespace Test
             }
         }
 
-        public List<FilteredPsmTSV> ReadFilteredPsmTSV(List<string> path)
+        public List<FilteredPsmTSV> ReadFilteredPsmTSV(string path)
         {
             List<FilteredPsmTSV> filteredList = new List<FilteredPsmTSV>();
 
-            foreach (var file in path)
+            using (var reader = new StreamReader(path))
             {
-                using (var reader = new StreamReader(file))
+                reader.ReadLine();
+                string[] lineCheck;
+                while (reader.EndOfStream == false)
                 {
-                    reader.ReadLine();
-                    string[] lineCheck;
-                    while (reader.EndOfStream == false)
-                    {
-                        var line = reader.ReadLine().Split('\t');
-                        FilteredPsmTSV filteredPsm = new FilteredPsmTSV(line);
-                        filteredList.Add(filteredPsm);
-                    }
+                    var line = reader.ReadLine().Split('\t');
+                    FilteredPsmTSV filteredPsm = new FilteredPsmTSV(line);
+                    filteredList.Add(filteredPsm);
                 }
             }
-            
             return filteredList;
         }
     }
