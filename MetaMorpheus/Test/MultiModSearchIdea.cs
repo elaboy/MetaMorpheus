@@ -87,6 +87,9 @@ namespace Test
             var (scans, dataFile) = ExtractScansAndSourceFile(filteredFile, filePaths);
 
             MsDataFile msDataScans = new GenericMsDataFile(scans, dataFile.GetSourceFile());
+            // todo: update PSMTSV to reflect new mzML file, maybe modify after mzML creation or before?? Before would imply carrying counters maybe as an array or list?
+
+
             //MsDataFile dataFileReader = Readers.ThermoRawFileReader.LoadAllStaticData(Frac8);
 
             //dataFileReader.Scans = scans;
