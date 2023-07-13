@@ -1,15 +1,19 @@
 ﻿using EngineLayer;
 using MassSpectrometry;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
+using Newtonsoft.Json.Serialization;
 using NUnit.Framework;
 using Proteomics;
 using Readers;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Automation.Peers;
+using System.Windows.Input;
 using UsefulProteomicsDatabases;
 
 namespace Test
@@ -20,85 +24,106 @@ namespace Test
         #region Files Path
 
         private const string Frac1 =
-            @"D:\\08-30-22_bottomup\\fractionated\08-31-22_fractionated_human_Tryp_40ug_F1.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\08-31-22_fractionated_human_Tryp_40ug_F1.raw";
 
         private const string Frac1_2 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F1_2.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F1_2.raw";
 
         private const string Frac2 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F2.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F2.raw";
 
         private const string Frac3 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F3.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F3.raw";
 
         private const string Frac4 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F4.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F4.raw";
 
         private const string Frac5 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F5.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F5.raw";
 
         private const string Frac6 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F6.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F6.raw";
 
         private const string Frac7 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F7.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F7.raw";
 
         private const string Frac8 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F8.raw";
+            @"K:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F8.raw";
 
         private const string AllPeptidesPsm1 =
-            @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\AllPeptides.psmtsv";
+            @"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\AllPeptides.psmtsv";
         #endregion
+
+        [Test]
+        public void TestMzMLWitter()
+        {
+            var file = Readers.ThermoRawFileReader.LoadAllStaticData(Frac1);
+
+            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(file, "test.mzML", false);
+
+            Console.WriteLine("yes");
+        }
 
         [Test]
         public void Run()
         {
             List<string> filePaths = new List<string>()
             {
-                Frac1, Frac1_2, Frac3, Frac4, Frac5, Frac6, Frac7, Frac8
+                Frac1, Frac2, Frac1_2, Frac3, Frac4, Frac5, Frac6, Frac7, Frac8
             };
 
             var psms = PsmTsvReader.ReadTsv(AllPeptidesPsm1, out List<string> warnings);
 
             var filteredPsms = FilterPsm(psms).ToList();
 
-            WriteFilteredPsmsToTSV(filteredPsms, @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\example.psmtsv");
+            WriteFilteredPsmsToTSV(filteredPsms, @"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\example.psmtsv");
 
             var filteredFile =
-                ReadFilteredPsmTSV(@"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\example.psmtsv");
+                ReadFilteredPsmTSV(@"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\example.psmtsv");
 
             WriteFastaDBFromFilteredPsm(filteredFile,
-                @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\database_example.fasta");
+                @"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\database_example.fasta");
 
-            var scans = ExtractScans(filteredFile, filePaths);
+            var (scans, dataFile) = ExtractScansAndSourceFile(filteredFile, filePaths);
 
-            CreateMzML(scans, @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\file_example.mzML");
+            MsDataFile msDataScans = new GenericMsDataFile(scans, dataFile.GetSourceFile());
+            //MsDataFile dataFileReader = Readers.ThermoRawFileReader.LoadAllStaticData(Frac8);
+
+            //dataFileReader.Scans = scans;
+
+            //dataFileReader.SourceFile = new SourceFile("no nativeID format", "mzML format",
+            //    null, null, filePath: @"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\file_example.mzML", null);
+
+            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(msDataScans, "test.mzML", true);
+            //MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(dataFile, "example.mzML", false);
+
+            //MsDataScan[] scansArray = scans.Select(x => x).ToArray();
+
+            //CreateMzML(scans, sourceFile, @"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\file_example.mzML");
 
             Console.WriteLine("Done");
 
+            Assert.Pass();
+
         }
 
-        public static void CreateMzML(List<MsDataScan> scans, string path)
+        public static void CreateMzML(MsDataScan[] scans, SourceFile sourceFile, string path)
         {
-            SourceFile sourceFile = new SourceFile("no nativeID format", "mzML format",
-                null, null, null);
+            SourceFile sourceFile1 = new("no nativeID format", "mzML format",
+                null, null, filePath: @"K:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\file_example.mzML", null);
+           
+            MsDataFile genericFile = new GenericMsDataFile(scans:scans, sourceFile: sourceFile);
 
-            //var file = new GenericMsDataFile(scans.ToArray(), sourceFile);
-            //File.Create(path);
-            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(new GenericMsDataFile(scans.ToArray(), sourceFile), path, false);
+            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(genericFile, path, false);
         }
 
-        public List<MsDataScan> ExtractScans(List<FilteredPsmTSV> psms, List<string> filePaths)
+        public (MsDataScan[], MsDataFile) ExtractScansAndSourceFile(List<FilteredPsmTSV> psms, List<string> filePaths)
         {
             List<MsDataFile> loadedFiles = new();
 
             foreach (var file in filePaths)
             {
-                int worker = 0;
-                int io = 0;
-                ThreadPool.GetAvailableThreads(workerThreads: out worker, completionPortThreads: out io);
-
-                loadedFiles.Add(new ThermoRawFileReader(file).LoadAllStaticData(maxThreads: worker));
+                loadedFiles.Add(Readers.ThermoRawFileReader.LoadAllStaticData(file));
             }
 
             List<string> fileName = new();
@@ -110,6 +135,8 @@ namespace Test
 
             List<Tuple<string, MsDataFile>> tupleList = new();
 
+            MsDataFile dataFile = loadedFiles[0];
+
             for (int i = 0; i < loadedFiles.Count(); i++)
             {
                 tupleList.Add(new Tuple<string, MsDataFile>(item1: fileName[i], item2: loadedFiles[i]));
@@ -117,55 +144,74 @@ namespace Test
 
             var dict = tupleList.ToImmutableDictionary(x => x.Item1, x => x.Item2);
 
-            List<MsDataScan> scans = new();
-
+            List<MsDataScan> scanList = new List<MsDataScan>();
+            int counter = 1;
+            int precursorNumber= 1;
+            double retentionTime = 1;
+            double injectionTime = 1;
             foreach (var psm in psms)
             {
-                foreach (var item in dict)
+                foreach(var file in dict)
                 {
-                    if (item.Value.SourceFile.FileName.Contains(psm.FileName))
+                    if(file.Key.Contains(psm.FileName))
                     {
-                        foreach (var scan in item.Value.Scans)
+                        var ms1 = file.Value.GetMS1Scans().First();
+
+                        MsDataScan ms2 = file.Value.GetOneBasedScan(int.Parse(psm.ScanNumber));
+                        double[,] mzIntensitiesMS1 = new double[2, ms1.MassSpectrum.XArray.Length];
+                        double[,] mzIntensitiesMS2 = new double[2, ms2.MassSpectrum.XArray.Length];
+
+                        // Two 1-D array to One 2-D array
+                        for(int i = 0; i < ms1.MassSpectrum.XArray.Length; i++)
                         {
-                            if (scan.OneBasedScanNumber.Equals(int.Parse(psm.ScanNumber)) && scan.MsnOrder == 2)
-                            {
-                                scans.Add(scan);
-                                break;
-                            }
+                            mzIntensitiesMS1[0, i] = ms1.MassSpectrum.XArray[i];
+                            mzIntensitiesMS1[1, i] = ms1.MassSpectrum.YArray[i];
+                        }
+                        for (int i = 0; i < ms2.MassSpectrum.XArray.Length; i++)
+                        {
+                            mzIntensitiesMS2[0, i] = ms1.MassSpectrum.XArray[i];
+                            mzIntensitiesMS2[1, i] = ms1.MassSpectrum.YArray[i];
                         }
 
+                        MzSpectrum spectrumMS1 = new MzSpectrum(mzIntensitiesMS1);
+                        MzSpectrum spectrumMS2 = new MzSpectrum(mzIntensitiesMS2);
+                        //Recreate Scan
+                        MsDataScan scanMS1 = new MsDataScan(massSpectrum: spectrumMS1, oneBasedScanNumber: counter, msnOrder: ms1.MsnOrder, isCentroid:ms1.IsCentroid, polarity: ms1.Polarity,
+                            retentionTime:retentionTime, scanWindowRange: ms1.ScanWindowRange, scanFilter: ms1.ScanFilter, mzAnalyzer: ms1.MzAnalyzer,
+                            totalIonCurrent: ms1.TotalIonCurrent, injectionTime: injectionTime, noiseData: ms1.NoiseData, nativeId: "controllerType=0 controllerNumber=1 scan="+counter.ToString(), selectedIonMz: ms1.SelectedIonMZ,
+                            selectedIonChargeStateGuess: ms1.SelectedIonChargeStateGuess, selectedIonIntensity: ms1.SelectedIonIntensity,
+                            isolationMZ: ms1.IsolationMz, isolationWidth: ms1.IsolationWidth, dissociationType: ms1.DissociationType, oneBasedPrecursorScanNumber: precursorNumber,
+                            hcdEnergy: ms1.HcdEnergy);
+
+                        counter++;
+                        precursorNumber++;
+                        retentionTime++;
+                        injectionTime++;
+
+                        MsDataScan scanMS2 = new MsDataScan(massSpectrum: spectrumMS2, oneBasedScanNumber: counter, msnOrder: ms2.MsnOrder, isCentroid: ms2.IsCentroid, polarity: ms2.Polarity,
+                        retentionTime: retentionTime, scanWindowRange: ms2.ScanWindowRange, scanFilter: ms2.ScanFilter, mzAnalyzer: ms2.MzAnalyzer,
+                        totalIonCurrent: ms2.TotalIonCurrent, injectionTime: injectionTime, noiseData: ms2.NoiseData, nativeId: "controllerType=0 controllerNumber=1 scan=" + counter.ToString(), selectedIonMz: ms2.SelectedIonMZ,
+                        selectedIonChargeStateGuess: ms2.SelectedIonChargeStateGuess, selectedIonIntensity: ms2.SelectedIonIntensity,
+                        isolationMZ: ms2.IsolationMz, isolationWidth: ms2.IsolationWidth, dissociationType: ms2.DissociationType, oneBasedPrecursorScanNumber: precursorNumber,
+                        hcdEnergy: ms2.HcdEnergy);
+
+
+                        counter++;
+                        precursorNumber++;
+                        retentionTime++;
+                        injectionTime++;
+                        //tempFile.SetOneBasedScanNumber(counter);
+
+                        scanList.Add(scanMS1);
+                        scanList.Add(scanMS2);
                         break;
                     }
-
-                    //break;
-
-                    //if (item.Value.SourceFile.FileName.Contains(psm.FileName) && item.Value.NumSpectra.Equals(int.Parse(psm.ScanNumber)))
-                    //{
-                    //    scans.Add(item.Value.GetOneBasedScan(int.Parse(psm.ScanNumber)));
-                    //    break;
-                    //}
                 }
             }
 
-            //ImmutableDictionary<string, MsDataFile> files =
-            //    ImmutableDictionary.CreateRange(
-            //        new KeyValuePair<string, MsDataFile>[]
-            //        {
-            //            KeyValuePair.Create("", new ThermoRawFileReader(filePath[0]).LoadAllStaticData())
-            //        }
-            //    );
+            MsDataScan[] scansArray = scanList.Select(x => x).ToArray();
 
-            //foreach (var path in filePath)
-            //{
-            //    files.Add(new ThermoRawFileReader(path));
-            //}
-
-            //foreach (var psm in psms)
-            //{
-            //    scans.Add(files.GetOneBasedScan(int.Parse(psm.ScanNumber)));
-            //}
-
-            return scans;
+             return (scansArray, dataFile);
         }
 
         public static void WriteFastaDBFromFilteredPsm(List<FilteredPsmTSV> psms, string path)
@@ -202,7 +248,7 @@ namespace Test
             using (var writer = new StreamWriter(path))
             {
                 //makes this an enum?
-                string header = "File Name\tScan Number\tScore\tBase Sequence\t" +
+                string header = "File Name\tScan Number\tPrecursor Scan Number\tScore\tBase Sequence\t" +
                                 "Full Sequence\tMods\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
@@ -212,7 +258,7 @@ namespace Test
                 {
                     string[] row = new[]
                     {
-                        String.Join('_',psm.FileNameWithoutExtension.Split('_').SkipLast(1)),
+                        String.Join('-',psm.FileNameWithoutExtension.Split('-').SkipLast(1)),
                         psm.Ms2ScanNumber.ToString(),
                         psm.PrecursorScanNum.ToString(),
                         psm.Score.ToString(),
