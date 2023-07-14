@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Transactions;
 using UsefulProteomicsDatabases;
 using Readers;
 
@@ -23,7 +24,7 @@ namespace EngineLayer
             for (int i = 0; i < psms.Count(); i++)
             {
                 psms[i].PrecursorScanNumber = dataScans[i].OneBasedPrecursorScanNumber.ToString();
-                psms[i].ScanNumber = dataScans[i+1].OneBasedScanNumber.ToString();
+                psms[i].ScanNumber = dataScans[i].OneBasedScanNumber.ToString();
             }
             WriteUpdatedFilteredPsmsToTSV(psms, psmFilePath);
         }
@@ -112,9 +113,9 @@ namespace EngineLayer
                 {
                     if (file.Key.Contains(psm.FileName))
                     {
-                        var ms1 = file.Value.GetMS1Scans().First();
-
+                        //var ms1 = file.Value.GetMS1Scans().First();
                         MsDataScan ms2 = file.Value.GetOneBasedScan(int.Parse(psm.ScanNumber));
+                        var ms1 = file.Value.GetOneBasedScan((int)ms2.OneBasedPrecursorScanNumber);
                         double[,] mzIntensitiesMS1 = new double[2, ms1.MassSpectrum.XArray.Length];
                         double[,] mzIntensitiesMS2 = new double[2, ms2.MassSpectrum.XArray.Length];
 
@@ -126,8 +127,8 @@ namespace EngineLayer
                         }
                         for (int i = 0; i < ms2.MassSpectrum.XArray.Length; i++)
                         {
-                            mzIntensitiesMS2[0, i] = ms1.MassSpectrum.XArray[i];
-                            mzIntensitiesMS2[1, i] = ms1.MassSpectrum.YArray[i];
+                            mzIntensitiesMS2[0, i] = ms2.MassSpectrum.XArray[i];
+                            mzIntensitiesMS2[1, i] = ms2.MassSpectrum.YArray[i];
                         }
 
                         MzSpectrum spectrumMS1 = new MzSpectrum(mzIntensitiesMS1);
@@ -201,6 +202,38 @@ namespace EngineLayer
             return filteredPsms;
         }
 
+        public static void WriteFilteredPsmsToTSVFull(List<PsmFromTsv> filteredPsms, string path)
+        {
+            using (var writer = new StreamWriter(path))
+            {
+                //makes this an enum?
+                string header =
+                    "File Name\tScan Number\tScan Retention Time\tNum Experimental Peaks\tTotal Ion Current\t" +
+                    "Precursor Scan Number\tPrecursor Charge\tPrecursor MZ\tPrecursor Mass\tScore\tDelta Score\t" +
+                    "Notch\tBase Sequence\tFull Sequence\tEssential Sequence\tAmbiguity Level\tPSM Count (unambiguous, <0.01 q-value)\t" +
+                    "Mods\tMods Chemical Formulas\tNum Variable Mods\tMissed Cleavages\tPeptide Monoisotopic Mass\tMass Diff (Da)\t" +
+                    "Mass Diff (ppm)\tProtein Accession\tProtein Name\tGene Name\tOrganism Name\tIntersecting Sequence Variations\t" +
+                    "Identified Sequence Variations\tSplice Sites\tContaminants\tDecoy\tPeptide Description\tStart and End Residues In Protein\t" +
+                    "Previous Amino Acid\tNext Amino Acid\tTheoreticals Searched\tDecoy/Contaminant/Target\tMatched Ion Series\tMatched Ion Mass-To-Charge Ratios\t" +
+                    "Matched Ion Mass Diff (Da)\tMatched Ion Mass Diff (Ppm)\tMatched Ion Intensities\tMatched Ion Counts\tLocalized Scores\tImprovement Possible\t" +
+                    "Cumulative Target\tCumulative Decoy\tCumulative Target Notch\tCumulative Decoy Notch\tQValue\tQValue Notch\tPEP\tPEP_QValue";
+
+                writer.WriteLine(header);
+                foreach (var psm in filteredPsms)
+                {
+                    string[] row = new[]
+                    {
+                        String.Join('-',psm.FileNameWithoutExtension.Split('-').SkipLast(1)),
+                        psm.Ms2ScanNumber.ToString(),
+                        psm.PrecursorScanNum.ToString(),
+                        psm.RetentionTime.ToString(),
+                        string.Join(' ',psm.MatchedIons.Select(x => x.Annotation).ToArray()),
+                        psm.MatchedIons.Count().ToString()
+                    };
+                    writer.WriteLine(string.Join('\t', row));
+                }
+            }
+        }
 
         public static void WriteFilteredPsmsToTSV(List<PsmFromTsv> filteredPsms, string path)
         {
@@ -238,7 +271,14 @@ namespace EngineLayer
             }
         }
 
-        public static List<FilteredPsmTSV> ReadFilteredPsmTSV(string path)
+        public static List<PsmFromTsv> ReadPSMTSVFull(string psmPath)
+        {
+            List<PsmFromTsv> parsedPsms = PsmTsvReader.ReadTsv(psmPath, out var warnings);
+            return parsedPsms;
+
+        }
+
+        public static List<FilteredPsmTSV> ReadFilteredPsmTSVShort(string path)
         {
             List<FilteredPsmTSV> filteredList = new List<FilteredPsmTSV>();
 

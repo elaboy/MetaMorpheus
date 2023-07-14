@@ -70,10 +70,12 @@ namespace Test
 
             var filteredPsms = MMGPTMD.FilterPsm(psms).ToList();
 
+            
+
             MMGPTMD.WriteFilteredPsmsToTSV(filteredPsms, @"D:\08-30-22_bottomup\example.psmtsv");
 
             var filteredFile =
-                MMGPTMD.ReadFilteredPsmTSV(@"D:\08-30-22_bottomup\example.psmtsv");
+                MMGPTMD.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv");
 
             MMGPTMD.WriteFastaDBFromFilteredPsm(filteredFile,
                 @"D:\08-30-22_bottomup\database_example.fasta");
