@@ -14,9 +14,33 @@ namespace EngineLayer
 {
     public class MMGPTMD
     {
+        public static List<Mods> MultiModDiscovery(string filePath)
+        {
+
+            var msDataFile = MsDataFileReader.GetDataFile(filePath);
+            var msDataScans= msDataFile.LoadAllStaticData();
+
+            var ms2Scans = 
+                from scans in msDataScans.Scans
+                where scans.MsnOrder == 2
+                select scans;
+
+            var mods = new Mods(@"Data\unimod.xml");
+
+            foreach (var scan in ms2Scans)
+            {
+                double[] Mz = scan.MassSpectrum.XArray;
+                double[] deltaMz = new double[] { Mz.Length };
+
+                
+            }
+
+            return new List<Mods>();
+        }
+
         public static void UpdateTheFilteredPsmFile(MsDataFile msDataFile, string psmFilePath)
         {
-            List<FilteredPsmTSV> psms = ReadFilteredPsmTSV(psmFilePath);
+            List<FilteredPsmTSV> psms = ReadFilteredPsmTSVShort(psmFilePath);
 
             MsDataScan[] dataScans = msDataFile.GetMsDataScans();
 
@@ -139,11 +163,10 @@ namespace EngineLayer
                             totalIonCurrent: ms1.TotalIonCurrent, injectionTime: injectionTime, noiseData: ms1.NoiseData,
                             nativeId: "controllerType=0 controllerNumber=1 scan=" + counter.ToString(), selectedIonMz: ms1.SelectedIonMZ,
                             selectedIonChargeStateGuess: ms1.SelectedIonChargeStateGuess, selectedIonIntensity: ms1.SelectedIonIntensity,
-                            isolationMZ: ms1.IsolationMz, isolationWidth: ms1.IsolationWidth, dissociationType: ms1.DissociationType, oneBasedPrecursorScanNumber: precursorNumber,
+                            isolationMZ: ms1.IsolationMz, isolationWidth: ms1.IsolationWidth, dissociationType: ms1.DissociationType,
                             hcdEnergy: ms1.HcdEnergy);
 
                         counter++;
-                        precursorNumber++;
                         retentionTime++;
                         injectionTime++;
 

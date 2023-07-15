@@ -87,7 +87,7 @@ namespace Test
             // todo: update PSMTSV to reflect new mzML file, maybe modify after mzML creation or before?? Before would imply carrying counters maybe as an array or list?
 
 
-            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(msDataFile, @"D:\08-30-22_bottomup\test.mzML", true);
+            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(msDataFile, @"D:\08-30-22_bottomup\test.mzML", false);
 
             MMGPTMD.UpdateTheFilteredPsmFile(msDataFile, @"D:\08-30-22_bottomup\example.psmtsv");
 
@@ -97,7 +97,13 @@ namespace Test
 
         }
 
+        [Test]
+        public void TestMultiModDiscovery()
+        {
+            MMGPTMD.MultiModDiscovery(@"D:\08-30-22_bottomup\test.mzML");
 
+            Console.WriteLine("Okay");
+        }
     }
 
 
