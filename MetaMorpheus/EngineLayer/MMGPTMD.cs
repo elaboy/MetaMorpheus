@@ -105,7 +105,7 @@ namespace EngineLayer
 
             foreach (var file in filePaths)
             {
-                loadedFiles.Add(Readers.ThermoRawFileReader.LoadAllStaticData(file));
+                loadedFiles.Add(Readers.MsDataFileReader.GetDataFile(file).LoadAllStaticData());
             }
 
             List<string> fileName = new();

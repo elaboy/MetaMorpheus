@@ -14,31 +14,31 @@ namespace Test
         #region Files Path
 
         private const string Frac1 =
-            @"D:\\08-30-22_bottomup\\fractionated\08-31-22_fractionated_human_Tryp_40ug_F1.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F1-calib.mzML";
 
-        private const string Frac1_2 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F1_2.raw";
+        //private const string Frac1_2 =
+        //    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F2-calib.mzML";
 
         private const string Frac2 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F2.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F2-calib.mzML";
 
         private const string Frac3 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F3.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F3-calib.mzML";
 
         private const string Frac4 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F4.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F4-calib.mzML";
 
         private const string Frac5 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F5.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F5-calib.mzML";
 
         private const string Frac6 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F6.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F6-calib.mzML";
 
         private const string Frac7 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F7.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F7-calib.mzML";
 
         private const string Frac8 =
-            @"D:\\08-30-22_bottomup\\fractionated\\08-31-22_fractionated_human_Tryp_40ug_F8.raw";
+            @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F8-calib.mzML";
 
         private const string AllPeptidesPsm1 =
             @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\AllPeptides.psmtsv";
@@ -63,7 +63,7 @@ namespace Test
 
             List<string> filePaths = new List<string>()
             {
-                Frac1, Frac1_2, Frac2, Frac3, Frac4, Frac5, Frac6, Frac7, Frac8
+                Frac1, Frac2, Frac3, Frac4, Frac5, Frac6, Frac7, Frac8
             };
 
             var psms = PsmTsvReader.ReadTsv(AllPeptidesPsm1, out List<string> warnings);
