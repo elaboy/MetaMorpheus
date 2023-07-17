@@ -7,13 +7,36 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Transactions;
+using Chemistry;
 using UsefulProteomicsDatabases;
 using Readers;
+using TorchSharp;
+using Easy.Common.Extensions;
+using MzLibUtil;
+using Nett;
+using Proteomics.AminoAcidPolymer;
+using TaskLayer;
 
 namespace EngineLayer
 {
     public class MMGPTMD
     {
+        public IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml)
+        {
+            var task = Toml.ReadFile<GptmdTask>(gptmdToml,
+                MetaMorpheusTask.tomlConfig);
+
+            var mods = GlobalVariables.AllModsKnownDictionary;
+
+            foreach (var (item1, item2) in task.GptmdParameters.ListOfModsGptmd)
+            {
+                if (mods.TryGetValue(item2, out Modification mod))
+                {
+                    yield return mod;
+                }
+            }
+        }
+
         public static List<Mods> MultiModDiscovery(string filePath)
         {
 
@@ -25,14 +48,67 @@ namespace EngineLayer
                 where scans.MsnOrder == 2
                 select scans;
 
+            var ms1Scans = 
+                from scans in msDataScans.Scans
+                where scans.MsnOrder == 1
+                select scans;
+
             var mods = new Mods(@"Data\unimod.xml");
 
+            var tolerance = new PpmTolerance(10); //Tolerance is better than more or less 
+            
+            var mods2 = GlobalVariables.AllModsKnownDictionary;
             foreach (var scan in ms2Scans)
             {
-                double[] Mz = scan.MassSpectrum.XArray;
-                double[] deltaMz = new double[] { Mz.Length };
+                double[] mz = scan.MassSpectrum.XArray;
+                //double[] deltaMz = new double[] { mz.Length };
+
+                //torch.Tensor mz =  torch.tensor(scan.MassSpectrum.XArray);
+                List<List<double>> deltaMz = new();
+                //List < torch.Tensor > deltaMzTensors = new();
+
+                for (int i = 0; i < scan.MassSpectrum.XArray.Length-1; i++)
+                {
+                    List<double> tempDeltaMzList = new();
+
+                    for (int k = i+1; k < scan.MassSpectrum.XArray.Length - 1; k++)
+                    {
+                        var tempDeltaMz = Math.Abs(mz[i] - mz[k]);
+                        if (tempDeltaMz > 50)
+                        {
+                            tempDeltaMzList.Add(tempDeltaMz);
+                        }
+                    }
+                    deltaMz.Add(tempDeltaMzList);
+                }
 
                 
+
+                foreach (var delta in deltaMz)
+                {
+                    foreach (var residue in delta)
+                    {
+                        var AADict = new Mods();
+                        var roundedResidue = (double)Math.Round(residue, 2);
+                        //Residue.GetResidue().MonoisotopicMass; GETS THE MONOISOTOPIC
+                        foreach (var AA in AADict.AAsMonoIsotopic)
+                        {
+                            //if (tolerance.Within(AA.Value.ToMz(), residue))
+                            //{
+                                
+
+                            //}
+                            if (Math.Round(AA.Value, 2).Equals( roundedResidue + 0.01) || Math.Round(AA.Value, 2).Equals(roundedResidue - 0.01) ||
+                                Math.Round(AA.Value, 2).Equals(roundedResidue))
+                            {
+                                Console.Write(AA.Key + " | ");
+                            }
+                        }
+                    }
+                    Console.WriteLine();
+                }
+
+                break;
             }
 
             return new List<Mods>();

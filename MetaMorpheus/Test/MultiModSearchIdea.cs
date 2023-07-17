@@ -1,10 +1,17 @@
 ﻿using EngineLayer;
 using MassSpectrometry;
+using Nett;
 using NUnit.Framework;
 using Readers;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Xml.Serialization;
+using Newtonsoft.Json;
+using Proteomics;
+using TaskLayer;
+using System.Threading.Tasks;
 
 namespace Test
 {
@@ -42,6 +49,7 @@ namespace Test
 
         private const string AllPeptidesPsm1 =
             @"D:\08-30-22_bottomup\fractionated_search\Task3-SearchTask\AllPeptides.psmtsv";
+
         #endregion
 
         [Test]
@@ -70,7 +78,7 @@ namespace Test
 
             var filteredPsms = MMGPTMD.FilterPsm(psms).ToList();
 
-            
+
 
             MMGPTMD.WriteFilteredPsmsToTSV(filteredPsms, @"D:\08-30-22_bottomup\example.psmtsv");
 
@@ -83,7 +91,7 @@ namespace Test
             var (scans, dataFile) = MMGPTMD.ExtractScansAndSourceFile(filteredFile, filePaths);
 
             MsDataFile msDataFile = new GenericMsDataFile(scans, new("no nativeID format", "mzML format",
-                null, null, filePath: @"D:\08-30-22_bottomup\test.mzML", null));// dataFile.GetSourceFile());
+                null, null, filePath: @"D:\08-30-22_bottomup\test.mzML", null)); // dataFile.GetSourceFile());
             // todo: update PSMTSV to reflect new mzML file, maybe modify after mzML creation or before?? Before would imply carrying counters maybe as an array or list?
 
 
@@ -104,8 +112,33 @@ namespace Test
 
             Console.WriteLine("Okay");
         }
+
+        //////[Test]
+        //////public void MakeModsDB()
+        //////{
+        //////    var task = Toml.ReadFile<GptmdTask>(@"C:\Users\Edwin\Downloads\Task1-GPTMDTaskconfig.toml",
+        //////        MetaMorpheusTask.tomlConfig);
+
+        //////    var mods = GlobalVariables.AllModsKnownDictionary;
+
+        //////    List<Modification> modificationList = new();
+
+        //////    foreach (var (item1, item2) in task.GptmdParameters.ListOfModsGptmd)
+        //////    {
+        //////        if (mods.TryGetValue(item2, out Modification mod))
+        //////        {
+        //////            modificationList.Add(mod);
+        //////        }
+        //////    }
+
+          
+        //////    XmlSerializer temp = new XmlSerializer(typeof(List<Modification>));
+        //////    using (StreamWriter writer = new(File.Create(@"C:\Users\Edwin\Downloads\Mods.xml")))
+        //////    {
+        //////        temp.Serialize(writer, modificationList);
+        //////    }
+        //////}
+
+
     }
-
-
-
 }
