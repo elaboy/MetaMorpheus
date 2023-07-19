@@ -159,6 +159,9 @@
     <None Update="SlicedSearchTaskConfig.toml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Task1-GPTMDTaskconfig.toml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="TestData\customBCZ.toml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

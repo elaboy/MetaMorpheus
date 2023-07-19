@@ -1,4 +1,6 @@
 ﻿using MassSpectrometry;
+using MzLibUtil;
+using Nett;
 using Proteomics;
 using Readers;
 using System;
@@ -6,22 +8,19 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using System.Transactions;
 using Chemistry;
-using UsefulProteomicsDatabases;
-using Readers;
-using TorchSharp;
-using Easy.Common.Extensions;
-using MzLibUtil;
-using Nett;
-using Proteomics.AminoAcidPolymer;
+using EngineLayer;
+using MathNet.Numerics;
 using TaskLayer;
+using Tensorboard;
+using ThermoFisher.CommonCore.Data;
+using UsefulProteomicsDatabases;
 
-namespace EngineLayer
+namespace TaskLayer
 {
     public class MMGPTMD
     {
-        public IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml)
+        public static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
         {
             var task = Toml.ReadFile<GptmdTask>(gptmdToml,
                 MetaMorpheusTask.tomlConfig);
@@ -37,26 +36,45 @@ namespace EngineLayer
             }
         }
 
+        public static ImmutableSortedDictionary<double, string> GetModsDictionary()
+        {
+            var mods = GetModsFromGptmdThing();
+            var aaDict = new Mods();
+
+            var modsDictonary = new Dictionary<double, string>();
+
+            foreach (var mod in mods)
+            {
+                var aminoacid = aaDict.AAsMonoIsotopic.TryGetValue(mod.Target.ToString(), out double residueMass);
+                if (residueMass > 0 && modsDictonary.ContainsKey((double)mod.MonoisotopicMass + residueMass) == false)
+                {
+                    modsDictonary.Add(value: mod.Target.ToString() + " " + mod.OriginalId, key: (double)mod.MonoisotopicMass + residueMass);
+                }
+            }
+
+            return modsDictonary.ToImmutableSortedDictionary();
+        }
+
         public static List<Mods> MultiModDiscovery(string filePath)
         {
 
             var msDataFile = MsDataFileReader.GetDataFile(filePath);
-            var msDataScans= msDataFile.LoadAllStaticData();
+            var msDataScans = msDataFile.LoadAllStaticData();
 
-            var ms2Scans = 
+            var ms2Scans =
                 from scans in msDataScans.Scans
                 where scans.MsnOrder == 2
                 select scans;
 
-            var ms1Scans = 
+            var ms1Scans =
                 from scans in msDataScans.Scans
                 where scans.MsnOrder == 1
                 select scans;
 
-            var mods = new Mods(@"Data\unimod.xml");
+            //var mods = new Mods(@"Data\unimod.xml");
 
-            var tolerance = new PpmTolerance(10); //Tolerance is better than more or less 
-            
+            var tolerance = new PpmTolerance(30); //Tolerance is better than more or less 
+
             var mods2 = GlobalVariables.AllModsKnownDictionary;
             foreach (var scan in ms2Scans)
             {
@@ -67,47 +85,115 @@ namespace EngineLayer
                 List<List<double>> deltaMz = new();
                 //List < torch.Tensor > deltaMzTensors = new();
 
-                for (int i = 0; i < scan.MassSpectrum.XArray.Length-1; i++)
+                for (int i = 0; i < scan.MassSpectrum.XArray.Length; i++)
                 {
                     List<double> tempDeltaMzList = new();
 
-                    for (int k = i+1; k < scan.MassSpectrum.XArray.Length - 1; k++)
+                    for (int k = i + 1; k < scan.MassSpectrum.XArray.Length - 1; k++)
                     {
                         var tempDeltaMz = Math.Abs(mz[i] - mz[k]);
-                        if (tempDeltaMz > 50)
-                        {
-                            tempDeltaMzList.Add(tempDeltaMz);
-                        }
+                        tempDeltaMzList.Add(tempDeltaMz);
                     }
+
                     deltaMz.Add(tempDeltaMzList);
                 }
 
-                
+                var mods = GetModsDictionary();
+                var aaMonoIso = new Mods().AAsMonoIsotopic.Values.ToArray();
+                var aaMonoIsoKey = new Mods().AAsMonoIsotopic.Keys.ToArray();
+                var ptmMonoIso = mods.Keys.ToArray();
+                var ptmMonoIsoResLetter = mods.Values.ToArray();
 
                 foreach (var delta in deltaMz)
                 {
-                    foreach (var residue in delta)
+                    var possibleSeq =
+                        from i in delta
+                        where i > 1
+                        select i;
+                    foreach (var mod in possibleSeq.Select(x => Math.Round(x, 2)).ToList())
                     {
-                        var AADict = new Mods();
-                        var roundedResidue = (double)Math.Round(residue, 2);
-                        //Residue.GetResidue().MonoisotopicMass; GETS THE MONOISOTOPIC
-                        foreach (var AA in AADict.AAsMonoIsotopic)
-                        {
-                            //if (tolerance.Within(AA.Value.ToMz(), residue))
-                            //{
-                                
+                        //Console.Write("delta: " + mod + " || ");
 
-                            //}
-                            if (Math.Round(AA.Value, 2).Equals( roundedResidue + 0.01) || Math.Round(AA.Value, 2).Equals(roundedResidue - 0.01) ||
-                                Math.Round(AA.Value, 2).Equals(roundedResidue))
+                        var gotIt = false;
+                        for (int i = 0; i < aaMonoIso.Length; i++)
+                        {
+
+                            if (mod.Equals(Math.Round(aaMonoIso[i], 2) + 0.01) || mod.Equals(Math.Round(aaMonoIso[i], 2) - 0.01) || mod.Equals(Math.Round(aaMonoIso[i], 2)))
                             {
-                                Console.Write(AA.Key + " | ");
+                                Console.Write(aaMonoIsoKey[i] + " | ");
+                                gotIt = true;
+                            }
+                            if (gotIt)
+                            {
+                                break;
+                            }
+                        }
+
+                        for (int k = 0; k < ptmMonoIso.Length; k++)
+                        {
+                            if (gotIt)
+                            {
+                                break;
+                            }
+                            if (mod.Equals(Math.Round(ptmMonoIso[k], 2) + 0.01) || mod.Equals(Math.Round(ptmMonoIso[k], 2) - 0.01) || mod.Equals(Math.Round(ptmMonoIso[k], 2)))
+                            {
+                                Console.Write(ptmMonoIsoResLetter[k] + " | ");
+                                gotIt = true;
+                                break;
                             }
                         }
                     }
                     Console.WriteLine();
                 }
 
+                ////foreach (var delta in deltaMz)
+                ////{
+                ////    foreach (var residue in delta)
+                ////    {
+                ////        var AADict = new Mods().AAsMonoIsotopic.ToList();
+                ////        var modList = mods.ToImmutableList();
+                ////        var roundedResidue = (double)Math.Round(residue, 2);
+
+
+
+                ////        for (int i = 0; i < AADict.Count(); i++)
+                ////        {
+                ////            if (tolerance.Within(residue, AADict[i].Value))
+                ////            {
+                ////                Console.Write(AADict[i].Key + " | ");
+                ////                break;
+                ////            }
+                ////        }
+                ////        for (int j = 0; j < modList.Count(); j++)
+                ////        {
+                ////            if (tolerance.Within(residue, modList[j].Key))
+                ////            {
+                ////                Console.Write(modList[j].Value + " | ");
+                ////                break;
+                ////            }
+                ////        }   
+
+
+                ////        //if(tolerance.Within(residue, AADict.Get))
+                ////        ////Residue.GetResidue().MonoisotopicMass; GETS THE MONOISOTOPIC
+                ////        //foreach (var AA in AADict)
+                ////        //{
+                ////        //    if(tolerance.Within(residue, AA.Value))
+                ////        //    {
+                ////        //        Console.Write(AA.Key + " | ");
+                ////        //    }
+                ////        //    else
+                ////        //    {
+                ////        //        var aaResName = mods.Values.ToArray();
+                ////        //        var aaMassArray= mods.Keys.Select(x => Math.Round(x, 3)).ToArray();
+                ////        //        var binarySearch = Array.BinarySearch(aaMassArray, Math.Round(residue, 3));
+                ////        //        if (binarySearch >= 0)
+                ////        //        {
+                ////        //            Console.WriteLine(aaResName[binarySearch]);
+                ////        //        }
+                ////        //    }
+                ////        //}
+                ////    }
                 break;
             }
 

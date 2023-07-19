@@ -113,6 +113,21 @@ namespace Test
             Console.WriteLine("Okay");
         }
 
+        [Test]
+        public void TestGetModsFromGptmdThing()
+        {
+            var test = MMGPTMD.GetModsFromGptmdThing(@"Task1-GPTMDTaskconfig.toml");
+        }
+
+        [Test]
+        public void TestGetModsDictionary()
+        {
+            var dict = MMGPTMD.GetModsDictionary();
+
+        }
+
+
+
         //////[Test]
         //////public void MakeModsDB()
         //////{
@@ -131,14 +146,13 @@ namespace Test
         //////        }
         //////    }
 
-          
+
         //////    XmlSerializer temp = new XmlSerializer(typeof(List<Modification>));
         //////    using (StreamWriter writer = new(File.Create(@"C:\Users\Edwin\Downloads\Mods.xml")))
         //////    {
         //////        temp.Serialize(writer, modificationList);
         //////    }
         //////}
-
 
     }
 }
