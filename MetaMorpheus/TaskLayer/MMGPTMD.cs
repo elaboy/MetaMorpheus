@@ -11,16 +11,80 @@ using System.Linq;
 using Chemistry;
 using EngineLayer;
 using MathNet.Numerics;
+using Proteomics.Fragmentation;
+using Proteomics.ProteolyticDigestion;
 using SharpLearning.Containers.Matrices;
 using TaskLayer;
 using Tensorboard;
 using ThermoFisher.CommonCore.Data;
+using TopDownProteomics.ProForma.Validation;
 using UsefulProteomicsDatabases;
 
 namespace TaskLayer
 {
     public class MMGPTMD
     {
+        public static void MatchSpectra(string filePath = @"D:\08-30-22_bottomup\test.mzML")
+        {
+            var msDataFile = MsDataFileReader.GetDataFile(filePath);
+            var msDataScans = msDataFile.LoadAllStaticData();
+
+            var ms2Scans =
+                from scans in msDataScans.Scans
+                where scans.MsnOrder == 2
+                select scans;
+
+            var ms1Scans =
+                from scans in msDataScans.Scans
+                where scans.MsnOrder == 1
+                select scans;
+
+            var phosphoMod = new Mods().AAsMonoIsotopic;
+
+            Dictionary<int, Modification> modsDictionary = new();
+
+            modsDictionary.Add(23, new Modification(_monoisotopicMass:79.99));
+            
+
+                //GlobalVariables.AllModsKnown.Select(x => new KeyValuePair<int, Modification>(1, x));
+
+            //get proteins from fasta database
+            var proteinDB = ProteinDbLoader.LoadProteinFasta(@"D:\08-30-22_bottomup\database_example.fasta",
+                generateTargets: true,
+                decoyType: DecoyType.None, isContaminant: false, out List<string> errors);
+
+            var mod = new PeptideWithSetModifications(
+                protein: proteinDB.First(),
+                new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                oneBasedEndResidueInProtein: proteinDB[0].BaseSequence.Length, cleavageSpecificity: CleavageSpecificity.Full,
+                peptideDescription: String.Empty, missedCleavages: 1, 
+                allModsOneIsNterminus: modsDictionary,
+                numFixedMods:0);
+
+            var products = new List<Product>();
+
+            mod.Fragment(dissociationType:DissociationType.HCD, fragmentationTerminus:FragmentationTerminus.Both, products: products);
+
+            var matched = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2Scans.First(),
+                ms2Scans.First().SelectedIonMZ.Value,
+                ms2Scans.First().SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
+                products, new CommonParameters());
+
+            List<Product> reducedProducts = new List<Product>(products);
+
+            foreach (var product in products)
+            {
+                foreach (var match in matched)
+                {
+                    if (product.Annotation.Equals(match.NeutralTheoreticalProduct.Annotation))
+                    {
+                        reducedProducts.Remove(product);
+                    }
+                }
+            }
+
+        }
+
         public static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
         {
             var task = Toml.ReadFile<GptmdTask>(gptmdToml,

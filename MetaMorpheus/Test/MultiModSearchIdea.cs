@@ -132,6 +132,11 @@ namespace Test
 
         }
 
+        [Test]
+        public void TestMatchSpectra()
+        {
+            MMGPTMD.MatchSpectra();
+        }
 
 
         //////[Test]
