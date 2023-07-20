@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Xml;
 using Chemistry;
 using EngineLayer;
 using MathNet.Numerics;
@@ -19,6 +20,7 @@ using Tensorboard;
 using ThermoFisher.CommonCore.Data;
 using TopDownProteomics.ProForma.Validation;
 using UsefulProteomicsDatabases;
+using Easy.Common.Extensions;
 
 namespace TaskLayer
 {
@@ -34,6 +36,7 @@ namespace TaskLayer
                 where scans.MsnOrder == 2
                 select scans;
 
+            var ms2ScansList = ms2Scans.ToList();
             var ms1Scans =
                 from scans in msDataScans.Scans
                 where scans.MsnOrder == 1
@@ -42,10 +45,15 @@ namespace TaskLayer
             var phosphoMod = new Mods().AAsMonoIsotopic;
 
             Dictionary<int, Modification> modsDictionary = new();
-
-            modsDictionary.Add(23, new Modification(_monoisotopicMass:79.99));
-            
-
+            Dictionary<int, Modification> acetylation = new();
+            Dictionary<int, Modification> oxidation = new();
+            Dictionary<int, Modification> oxiAndAcetyl = new();
+            oxiAndAcetyl.Add(1, new Modification(_monoisotopicMass:42.010565));
+            oxiAndAcetyl.Add(2, new Modification(_monoisotopicMass: 15.994915));
+            //modsDictionary.Add(1, new Modification(_monoisotopicMass: 57.021464));
+            //modsDictionary.Add(23, new Modification(_monoisotopicMass:79.99));
+            acetylation.Add(1, new Modification(_monoisotopicMass: 42.010565)); //acetylation
+            oxidation.Add(1, new Modification(_monoisotopicMass: 15.994915)); //oxidation
                 //GlobalVariables.AllModsKnown.Select(x => new KeyValuePair<int, Modification>(1, x));
 
             //get proteins from fasta database
@@ -54,20 +62,20 @@ namespace TaskLayer
                 decoyType: DecoyType.None, isContaminant: false, out List<string> errors);
 
             var mod = new PeptideWithSetModifications(
-                protein: proteinDB.First(),
+                protein: proteinDB[21],
                 new DigestionParams(), oneBasedStartResidueInProtein: 1,
-                oneBasedEndResidueInProtein: proteinDB[0].BaseSequence.Length, cleavageSpecificity: CleavageSpecificity.Full,
+                oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length, cleavageSpecificity: CleavageSpecificity.Full,
                 peptideDescription: String.Empty, missedCleavages: 1, 
-                allModsOneIsNterminus: modsDictionary,
+                allModsOneIsNterminus: oxiAndAcetyl,
                 numFixedMods:0);
 
             var products = new List<Product>();
 
             mod.Fragment(dissociationType:DissociationType.HCD, fragmentationTerminus:FragmentationTerminus.Both, products: products);
 
-            var matched = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2Scans.First(),
-                ms2Scans.First().SelectedIonMZ.Value,
-                ms2Scans.First().SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
+            var matched = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2ScansList[21],
+                    ms2ScansList[21].SelectedIonMZ.Value,
+                    ms2ScansList[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
                 products, new CommonParameters());
 
             List<Product> reducedProducts = new List<Product>(products);
@@ -82,7 +90,6 @@ namespace TaskLayer
                     }
                 }
             }
-
         }
 
         public static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
