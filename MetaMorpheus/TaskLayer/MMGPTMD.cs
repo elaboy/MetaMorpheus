@@ -21,6 +21,7 @@ using ThermoFisher.CommonCore.Data;
 using TopDownProteomics.ProForma.Validation;
 using UsefulProteomicsDatabases;
 using Easy.Common.Extensions;
+using ClassExtensions = Chemistry.ClassExtensions;
 
 namespace TaskLayer
 {
@@ -48,13 +49,13 @@ namespace TaskLayer
             Dictionary<int, Modification> acetylation = new();
             Dictionary<int, Modification> oxidation = new();
             Dictionary<int, Modification> oxiAndAcetyl = new();
-            oxiAndAcetyl.Add(1, new Modification(_monoisotopicMass:42.010565));
+            oxiAndAcetyl.Add(1, new Modification(_monoisotopicMass: 42.010565));
             oxiAndAcetyl.Add(2, new Modification(_monoisotopicMass: 15.994915));
             //modsDictionary.Add(1, new Modification(_monoisotopicMass: 57.021464));
             //modsDictionary.Add(23, new Modification(_monoisotopicMass:79.99));
             acetylation.Add(1, new Modification(_monoisotopicMass: 42.010565)); //acetylation
             oxidation.Add(1, new Modification(_monoisotopicMass: 15.994915)); //oxidation
-                //GlobalVariables.AllModsKnown.Select(x => new KeyValuePair<int, Modification>(1, x));
+            //GlobalVariables.AllModsKnown.Select(x => new KeyValuePair<int, Modification>(1, x));
 
             //get proteins from fasta database
             var proteinDB = ProteinDbLoader.LoadProteinFasta(@"D:\08-30-22_bottomup\database_example.fasta",
@@ -64,14 +65,16 @@ namespace TaskLayer
             var mod = new PeptideWithSetModifications(
                 protein: proteinDB[21],
                 new DigestionParams(), oneBasedStartResidueInProtein: 1,
-                oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length, cleavageSpecificity: CleavageSpecificity.Full,
-                peptideDescription: String.Empty, missedCleavages: 1, 
-                allModsOneIsNterminus: oxiAndAcetyl,
-                numFixedMods:0);
+                oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length,
+                cleavageSpecificity: CleavageSpecificity.Full,
+                peptideDescription: String.Empty, missedCleavages: 1,
+                allModsOneIsNterminus: new Dictionary<int, Modification>(),
+                numFixedMods: 0);
 
             var products = new List<Product>();
 
-            mod.Fragment(dissociationType:DissociationType.HCD, fragmentationTerminus:FragmentationTerminus.Both, products: products);
+            mod.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
+                products: products);
 
             var matched = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2ScansList[21],
                     ms2ScansList[21].SelectedIonMZ.Value,
@@ -90,7 +93,76 @@ namespace TaskLayer
                     }
                 }
             }
+
+            List<Tuple<List<MatchedFragmentIon>, int>> candidates = new();
+            candidates.Add(new(matched, matched.Count));
+            var ptmDictionary = GetModsFromGptmdThing();
+            for (int i = 0; i < reducedProducts.Count; i++)
+            {
+                for(int ptm = 0;ptm < ptmDictionary.Count(); ptm++) 
+                {
+                    for (int j = 0; j < reducedProducts.Count; j++)
+                    {
+                        List<MatchedFragmentIon> tempFragmentIons = new();
+
+                        var candidatePTM = new Dictionary<int, Modification>();
+                        candidatePTM.Add(reducedProducts[j].AminoAcidPosition,
+                            new Modification(_monoisotopicMass: ptmDictionary.ToList()[ptm].MonoisotopicMass));
+
+                        var candidate = new PeptideWithSetModifications(
+                            protein: proteinDB[21],
+                            new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                            oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length,
+                            cleavageSpecificity: CleavageSpecificity.Full,
+                            peptideDescription: String.Empty, missedCleavages: 1,
+                            allModsOneIsNterminus: candidatePTM,
+                            numFixedMods: 0);
+                        candidate.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
+                            products: products);
+
+                        var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2ScansList[21],
+                                ms2ScansList[21].SelectedIonMZ.Value,
+                                ms2ScansList[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
+                            products, new CommonParameters());
+                        
+                        if (match.Count > candidates.Last().Item2)
+                        {
+                            candidates.Add(new(match, match.Count));
+                        }
+                        else
+                        {
+                            for (int k = 0; k < ptmDictionary.Count() - 1; ++k)
+                            {
+                                var candidatePTM2 = new Dictionary<int, Modification>();
+                                candidatePTM2.Add(reducedProducts[2].AminoAcidPosition,
+                                    new Modification(_monoisotopicMass: ptmDictionary.ToList()[k].MonoisotopicMass));
+
+                                var candidate2 = new PeptideWithSetModifications(
+                                    protein: proteinDB[21],
+                                    new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                                    oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length,
+                                    cleavageSpecificity: CleavageSpecificity.Full,
+                                    peptideDescription: String.Empty, missedCleavages: 1,
+                                    allModsOneIsNterminus: candidatePTM2,
+                                    numFixedMods: 0);
+                                candidate.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
+                                    products: products);
+
+                                var match2 = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2ScansList[21],
+                                        ms2ScansList[21].SelectedIonMZ.Value,
+                                        ms2ScansList[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
+                                    products, new CommonParameters());
+                                if (match.Count > candidates.Last().Item2)
+                                {
+                                    candidates.Add(new(match, match.Count));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+
 
         public static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
         {
