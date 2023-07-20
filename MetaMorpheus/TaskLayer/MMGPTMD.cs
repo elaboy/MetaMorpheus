@@ -11,6 +11,7 @@ using System.Linq;
 using Chemistry;
 using EngineLayer;
 using MathNet.Numerics;
+using SharpLearning.Containers.Matrices;
 using TaskLayer;
 using Tensorboard;
 using ThermoFisher.CommonCore.Data;
@@ -36,23 +37,39 @@ namespace TaskLayer
             }
         }
 
-        public static ImmutableSortedDictionary<double, string> GetModsDictionary()
+        public static Dictionary<string, double> GetModsDictionary()
         {
             var mods = GetModsFromGptmdThing();
             var aaDict = new Mods();
 
-            var modsDictonary = new Dictionary<double, string>();
+            var modsDictonary = new Dictionary<string, double>();
 
             foreach (var mod in mods)
             {
                 var aminoacid = aaDict.AAsMonoIsotopic.TryGetValue(mod.Target.ToString(), out double residueMass);
-                if (residueMass > 0 && modsDictonary.ContainsKey((double)mod.MonoisotopicMass + residueMass) == false)
+                if (residueMass > 0 && modsDictonary.ContainsValue((double)mod.MonoisotopicMass + residueMass) == false)
                 {
-                    modsDictonary.Add(value: mod.Target.ToString() + " " + mod.OriginalId, key: (double)mod.MonoisotopicMass + residueMass);
+                    modsDictonary.Add(key: mod.Target.ToString() + " " + mod.OriginalId, value: (double)mod.MonoisotopicMass + residueMass);
                 }
             }
 
-            return modsDictonary.ToImmutableSortedDictionary();
+            return modsDictonary;
+        }
+
+        public static Dictionary<string, double> GetCandidates()
+        {
+            var mods = GetModsDictionary();
+            var aa = new Mods().AAsMonoIsotopic;
+
+            List<Dictionary<string, double>> candidateList = new();
+
+            candidateList.Add(aa);
+            candidateList.Add(mods);
+
+            Dictionary<string, double> candidates = candidateList.SelectMany(dict => dict)
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+
+            return candidates;
         }
 
         public static List<Mods> MultiModDiscovery(string filePath)
@@ -73,7 +90,6 @@ namespace TaskLayer
 
             //var mods = new Mods(@"Data\unimod.xml");
 
-            var tolerance = new PpmTolerance(30); //Tolerance is better than more or less 
 
             var mods2 = GlobalVariables.AllModsKnownDictionary;
             foreach (var scan in ms2Scans)
@@ -98,49 +114,53 @@ namespace TaskLayer
                     deltaMz.Add(tempDeltaMzList);
                 }
 
-                var mods = GetModsDictionary();
-                var aaMonoIso = new Mods().AAsMonoIsotopic.Values.ToArray();
-                var aaMonoIsoKey = new Mods().AAsMonoIsotopic.Keys.ToArray();
-                var ptmMonoIso = mods.Keys.ToArray();
-                var ptmMonoIsoResLetter = mods.Values.ToArray();
-
+                var mods = GetCandidates();
+                var tolerance = new PpmTolerance(20); //Tolerance is better than more or less 
+                List<List<string>> seq = new();
+                List<List<KeyValuePair<string, double>>> possibleSequences = new();
                 foreach (var delta in deltaMz)
                 {
+                    List<string> candidateSeq = new List<string>();
+
                     var possibleSeq =
                         from i in delta
-                        where i > 1
+                        where i > 40
                         select i;
-                    foreach (var mod in possibleSeq.Select(x => Math.Round(x, 2)).ToList())
+                    List<KeyValuePair<string, double>> possibleMod = new();
+
+                    foreach (var mod in possibleSeq)
                     {
-                        //Console.Write("delta: " + mod + " || ");
 
-                        var gotIt = false;
-                        for (int i = 0; i < aaMonoIso.Length; i++)
+                        foreach (var candidate in mods)
                         {
-
-                            if (mod.Equals(Math.Round(aaMonoIso[i], 2) + 0.01) || mod.Equals(Math.Round(aaMonoIso[i], 2) - 0.01) || mod.Equals(Math.Round(aaMonoIso[i], 2)))
+                            if (tolerance.Within(mod, candidate.Value))
                             {
-                                Console.Write(aaMonoIsoKey[i] + " | ");
-                                gotIt = true;
-                            }
-                            if (gotIt)
-                            {
-                                break;
+                                possibleMod.Add(candidate);
                             }
                         }
+                    }
 
-                        for (int k = 0; k < ptmMonoIso.Length; k++)
+                    possibleSequences.Add(possibleMod);
+                    seq.Add(candidateSeq);
+                }
+
+
+                foreach (var sequence in possibleSequences)
+                {
+                    if (sequence.Count > 1)
+                    {
+                        Console.Write("[");
+                        foreach (var candidate in sequence)
                         {
-                            if (gotIt)
-                            {
-                                break;
-                            }
-                            if (mod.Equals(Math.Round(ptmMonoIso[k], 2) + 0.01) || mod.Equals(Math.Round(ptmMonoIso[k], 2) - 0.01) || mod.Equals(Math.Round(ptmMonoIso[k], 2)))
-                            {
-                                Console.Write(ptmMonoIsoResLetter[k] + " | ");
-                                gotIt = true;
-                                break;
-                            }
+                            Console.Write(candidate.Key+" , ");
+                        }
+                        Console.Write("]");
+                    }
+                    else
+                    {
+                        foreach (var candidate in sequence)
+                        {
+                            Console.Write(candidate.Key + " | ");
                         }
                     }
                     Console.WriteLine();

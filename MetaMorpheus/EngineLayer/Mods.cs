@@ -10,12 +10,11 @@ namespace EngineLayer
         public int DataScanNumber { get; set; }
 
         // http://www.matrixscience.com/help/aa_help.html
-        public ImmutableSortedDictionary<string, double> AAsMonoIsotopic = ImmutableDictionary.CreateRange(
+        public Dictionary<string, double> AAsMonoIsotopic = new Dictionary<string, double>(
             new KeyValuePair<string, double>[]
             {
                 KeyValuePair.Create("A", 71.037114),
                 KeyValuePair.Create("R", 156.101111),
-                KeyValuePair.Create("N", 114.042927),
                 KeyValuePair.Create("N", 114.042927),
                 KeyValuePair.Create("D", 115.026943),
                 KeyValuePair.Create("C", 103.009185),
@@ -35,7 +34,7 @@ namespace EngineLayer
                 KeyValuePair.Create("W", 186.079313),
                 KeyValuePair.Create("Y", 163.06332),
                 KeyValuePair.Create("V", 99.068414)
-            }).ToImmutableSortedDictionary();
+            });
 
         public Mods()
         {

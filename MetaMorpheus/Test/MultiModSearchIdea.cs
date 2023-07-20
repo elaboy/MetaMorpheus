@@ -125,6 +125,12 @@ namespace Test
             var dict = MMGPTMD.GetModsDictionary();
 
         }
+        [Test]
+        public void TestGetCandidates()
+        {
+            var dict = MMGPTMD.GetCandidates();
+
+        }
 
 
 
