@@ -144,7 +144,18 @@ namespace Test
         [Test]
         public void MMGPTMDRun()
         {
-            var search = new MMGPTMD();
+            var search = new MMGPTMD(21);
+        }
+
+        [Test]
+        public void MultiMMGPTMD()
+        {
+            List<MMGPTMD> searches = new List<MMGPTMD>();
+
+            for (int i = 0; i < 26; i++)
+            {
+                searches.Add(new MMGPTMD(i));
+            }
         }
 
 

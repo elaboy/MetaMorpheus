@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using Readers.Generated;
 using UsefulProteomicsDatabases;
 
 namespace TaskLayer
@@ -22,16 +23,18 @@ namespace TaskLayer
         public List<Product> TheoreticalProducts { set; get; }
 
         public List<Tuple<List<MatchedFragmentIon>, int>> SearchResults { set; get; }
+        public List<Tuple<List<MatchedFragmentIon>, int>> FinalResult { set; get; }
         public List<MatchedFragmentIon> NoModSearch { get; set; }
         public List<Protein> ProteinDb { get; set; }
         public PeptideWithSetModifications PeptideToSearch { get; set; }
-        public List<IsotopicEnvelope> DeconvolutedScan { get; set; }
+        public IsotopicEnvelope[] DeconvolutedScan { get; set; }
         public List<MsDataScan> DataScans { get; set; }
         public List<MsDataScan> Ms1Scans { get; set; }
         public Modification[] UniModDb { get; set;}
-        public string Peptide { get; set; }
+        public List<PeptideWithSetModifications> PeptidesFromDb { get; set; }
+        public Protein Peptide { get; set; }
 
-        public MMGPTMD(string filePath= @"D:\08-30-22_bottomup\test.mzML", string dbPath= @"D:\08-30-22_bottomup\database_example.fasta")
+        public MMGPTMD(int scanNumber, string filePath= @"D:\08-30-22_bottomup\test.mzML", string dbPath= @"D:\08-30-22_bottomup\database_example.fasta")
         {
             ModsDictionary = new Dictionary<int, Modification>();
 
@@ -58,34 +61,58 @@ namespace TaskLayer
 
             Ms1Scans = ms1Scans.ToList();
 
-            Peptide = ProteinDb[21].BaseSequence;
-
-            CommonFixedPTMs();
-
-            GetPeptideWithSetModifications();
-
-            TheoreticalProducts = new List<Product>();
-
-            PeptideToSearch.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
-                products: TheoreticalProducts);
-
-            NoModSearch = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(DataScans[21],
-                    DataScans[21].SelectedIonMZ.Value,
-                    DataScans[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
-                TheoreticalProducts, new CommonParameters());
-
-            var tolerance = new PpmTolerance(1000);
-
             var deconvoluted = new Deconvoluter(DeconvolutionType.ClassicDeconvolution,
-                new ClassicDeconvolutionParameters(1,6, 10, 5));
+                new ClassicDeconvolutionParameters(1, 6, 10, 5));
 
-            DeconvolutedScan =  deconvoluted.Deconvolute(Ms1Scans[20]).ToList();
+            DeconvolutedScan = deconvoluted.Deconvolute(Ms1Scans[scanNumber]).ToArray();
+
+            var tolerance = new PpmTolerance(100);
+            PeptidesFromDb = new();
+            for(int i = 0; i < ProteinDb.Count; i++)
+            {
+                var candidate = new PeptideWithSetModifications(
+                    protein: ProteinDb[i],
+                    new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                    oneBasedEndResidueInProtein: ProteinDb[i].BaseSequence.Length,
+                    cleavageSpecificity: CleavageSpecificity.Full,
+                    peptideDescription: String.Empty, missedCleavages: 1,
+                    allModsOneIsNterminus: new Dictionary<int, Modification>(),
+                    numFixedMods: 0);
+                
+                PeptidesFromDb.Add(candidate);
+            }
 
             SearchResults = new List<Tuple<List<MatchedFragmentIon>, int>>();
+            foreach (var pepide in ProteinDb)
+            {
+                ModsDictionary = new Dictionary<int, Modification>();
+                
+                Peptide = pepide;
 
-            SearchResults.Add( new Tuple<List<MatchedFragmentIon>, int>(item1: NoModSearch, item2:NoModSearch.Count()));
+                CommonFixedPTMs();
 
-            
+                GetPeptideWithSetModifications();
+
+                TheoreticalProducts = new List<Product>();
+
+                PeptideToSearch.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
+                    products: TheoreticalProducts);
+
+                NoModSearch = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(DataScans[scanNumber],
+                        DataScans[scanNumber].SelectedIonMZ.Value,
+                        DataScans[scanNumber].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
+                    TheoreticalProducts, new CommonParameters());
+
+
+                SearchResults.Add(new Tuple<List<MatchedFragmentIon>, int>(item1: NoModSearch, item2: NoModSearch.Count()));
+
+                foreach (var search in SearchResults)
+                {
+                    Console.WriteLine("Experimental: "+search.Item1.Count + "| Theoretical: " + TheoreticalProducts.Count + "| Candidate: ");
+                }
+
+                Console.WriteLine("----------------");
+            }
 
             UniModDb = UsefulProteomicsDatabases.Loaders.LoadUnimod(@"unimod.xml").ToArray();
 
@@ -95,9 +122,9 @@ namespace TaskLayer
         public void GetPeptideWithSetModifications()
         {
             PeptideToSearch =  new PeptideWithSetModifications(
-                protein: ProteinDb[21],
+                protein: Peptide,
                 new DigestionParams(), oneBasedStartResidueInProtein: 1,
-                oneBasedEndResidueInProtein: ProteinDb[21].BaseSequence.Length,
+                oneBasedEndResidueInProtein: Peptide.BaseSequence.Length,
                 cleavageSpecificity: CleavageSpecificity.Full,
                 peptideDescription: String.Empty, missedCleavages: 1,
                 allModsOneIsNterminus: ModsDictionary,
@@ -106,19 +133,45 @@ namespace TaskLayer
 
         public void CommonFixedPTMs()
         {
-            var peptideSequence = Peptide.ToCharArray();
+            var peptideSequence = Peptide.BaseSequence.ToCharArray();
 
+            int counter = 1;
+            int PhosphoTwo = 0;
             for (int i = 0; i < peptideSequence.Length; i++)
             {
                 if (peptideSequence[i].Equals('C'))
                 {
-                    ModsDictionary.Add(i + 1, new Modification(_monoisotopicMass: 57.021464));
-                    ModsDictionary.Add(i + 2, new Modification(_monoisotopicMass: 15.994915));
+                    ModsDictionary.Add(counter,
+                        new Modification(_originalId: "Carbamidomethyl", _monoisotopicMass: 57.021464));
+                    counter++;
+                    ModsDictionary.Add(counter,
+                        new Modification(_originalId: "Deamidation", _monoisotopicMass: -17.026549));
+                    //ModsDictionary.Add(counter,
+                    //    new Modification(_originalId: "Oxidation", _monoisotopicMass: 15.994915));
+                    counter++;
                 }
-                else if (peptideSequence[i].Equals('M'))
+                //else if (peptideSequence[i].Equals('M'))
+                //{
+                //    ModsDictionary.Add(counter,
+                //        new Modification(_originalId: "Acetylation", _monoisotopicMass: 42.010565));
+                //    counter++;
+                //    ModsDictionary.Add(counter,
+                //        new Modification(_originalId: "Oxidation", _monoisotopicMass: 15.994915));
+                //    counter++;
+                //}
+                else if (peptideSequence[i].Equals('S') && PhosphoTwo < 2)
                 {
-                    ModsDictionary.Add(i+1, new Modification(_monoisotopicMass: 42.010565));
-                    ModsDictionary.Add(i+2, new Modification(_monoisotopicMass: 15.994915));
+                    PhosphoTwo++;
+                    counter++;
+                }
+                else if (peptideSequence[i].Equals('S') && PhosphoTwo >= 2)
+                {
+                    ModsDictionary.Add(counter, new Modification(_originalId: "Phospho", _monoisotopicMass: 79.9799));
+                    counter++;
+                }
+                else
+                {
+                    counter++;
                 }
             }
         }
