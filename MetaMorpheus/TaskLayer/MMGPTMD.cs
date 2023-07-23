@@ -1,32 +1,130 @@
-﻿using MassSpectrometry;
+﻿using Easy.Common.Extensions;
+using EngineLayer;
+using MassSpectrometry;
 using MzLibUtil;
 using Nett;
 using Proteomics;
+using Proteomics.Fragmentation;
+using Proteomics.ProteolyticDigestion;
 using Readers;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
-using System.Xml;
-using Chemistry;
-using EngineLayer;
-using MathNet.Numerics;
-using Proteomics.Fragmentation;
-using Proteomics.ProteolyticDigestion;
-using SharpLearning.Containers.Matrices;
-using TaskLayer;
-using Tensorboard;
-using ThermoFisher.CommonCore.Data;
-using TopDownProteomics.ProForma.Validation;
 using UsefulProteomicsDatabases;
-using Easy.Common.Extensions;
-using ClassExtensions = Chemistry.ClassExtensions;
 
 namespace TaskLayer
 {
     public class MMGPTMD
     {
+        public Dictionary<int, Modification> ModsDictionary { set; get; }
+        public List<Product> TheoreticalProducts { set; get; }
+
+        public List<Tuple<List<MatchedFragmentIon>, int>> SearchResults { set; get; }
+        public List<MatchedFragmentIon> NoModSearch { get; set; }
+        public List<Protein> ProteinDb { get; set; }
+        public PeptideWithSetModifications PeptideToSearch { get; set; }
+        public List<IsotopicEnvelope> DeconvolutedScan { get; set; }
+        public List<MsDataScan> DataScans { get; set; }
+        public List<MsDataScan> Ms1Scans { get; set; }
+        public Modification[] UniModDb { get; set;}
+        public string Peptide { get; set; }
+
+        public MMGPTMD(string filePath= @"D:\08-30-22_bottomup\test.mzML", string dbPath= @"D:\08-30-22_bottomup\database_example.fasta")
+        {
+            ModsDictionary = new Dictionary<int, Modification>();
+
+
+            ProteinDb = ProteinDbLoader.LoadProteinFasta(dbPath,
+                generateTargets: true,
+                decoyType: DecoyType.None, isContaminant: false,
+                out List<string> errors);
+
+            var msDataFile = MsDataFileReader.GetDataFile(filePath);
+            var msDataScans = msDataFile.LoadAllStaticData();
+
+            var ms2Scans =
+                from scans in msDataScans.Scans
+                where scans.MsnOrder == 2
+                select scans;
+
+            DataScans = ms2Scans.ToList();
+
+            var ms1Scans =
+                from scans in msDataScans.Scans
+                where scans.MsnOrder == 1
+                select scans;
+
+            Ms1Scans = ms1Scans.ToList();
+
+            Peptide = ProteinDb[21].BaseSequence;
+
+            CommonFixedPTMs();
+
+            GetPeptideWithSetModifications();
+
+            TheoreticalProducts = new List<Product>();
+
+            PeptideToSearch.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
+                products: TheoreticalProducts);
+
+            NoModSearch = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(DataScans[21],
+                    DataScans[21].SelectedIonMZ.Value,
+                    DataScans[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
+                TheoreticalProducts, new CommonParameters());
+
+            var tolerance = new PpmTolerance(1000);
+
+            var deconvoluted = new Deconvoluter(DeconvolutionType.ClassicDeconvolution,
+                new ClassicDeconvolutionParameters(1,6, 10, 5));
+
+            DeconvolutedScan =  deconvoluted.Deconvolute(Ms1Scans[20]).ToList();
+
+            SearchResults = new List<Tuple<List<MatchedFragmentIon>, int>>();
+
+            SearchResults.Add( new Tuple<List<MatchedFragmentIon>, int>(item1: NoModSearch, item2:NoModSearch.Count()));
+
+            
+
+            UniModDb = UsefulProteomicsDatabases.Loaders.LoadUnimod(@"unimod.xml").ToArray();
+
+
+        }
+
+        public void GetPeptideWithSetModifications()
+        {
+            PeptideToSearch =  new PeptideWithSetModifications(
+                protein: ProteinDb[21],
+                new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                oneBasedEndResidueInProtein: ProteinDb[21].BaseSequence.Length,
+                cleavageSpecificity: CleavageSpecificity.Full,
+                peptideDescription: String.Empty, missedCleavages: 1,
+                allModsOneIsNterminus: ModsDictionary,
+                numFixedMods: 0);
+        }
+
+        public void CommonFixedPTMs()
+        {
+            var peptideSequence = Peptide.ToCharArray();
+
+            for (int i = 0; i < peptideSequence.Length; i++)
+            {
+                if (peptideSequence[i].Equals('C'))
+                {
+                    ModsDictionary.Add(i + 1, new Modification(_monoisotopicMass: 57.021464));
+                    ModsDictionary.Add(i + 2, new Modification(_monoisotopicMass: 15.994915));
+                }
+                else if (peptideSequence[i].Equals('M'))
+                {
+                    ModsDictionary.Add(i+1, new Modification(_monoisotopicMass: 42.010565));
+                    ModsDictionary.Add(i+2, new Modification(_monoisotopicMass: 15.994915));
+                }
+            }
+        }
+
+        
+
         public static void MatchSpectra(string filePath = @"D:\08-30-22_bottomup\test.mzML")
         {
             var msDataFile = MsDataFileReader.GetDataFile(filePath);
@@ -68,7 +166,7 @@ namespace TaskLayer
                 oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length,
                 cleavageSpecificity: CleavageSpecificity.Full,
                 peptideDescription: String.Empty, missedCleavages: 1,
-                allModsOneIsNterminus: new Dictionary<int, Modification>(),
+                allModsOneIsNterminus: oxiAndAcetyl,
                 numFixedMods: 0);
 
             var products = new List<Product>();
@@ -93,76 +191,7 @@ namespace TaskLayer
                     }
                 }
             }
-
-            List<Tuple<List<MatchedFragmentIon>, int>> candidates = new();
-            candidates.Add(new(matched, matched.Count));
-            var ptmDictionary = GetModsFromGptmdThing();
-            for (int i = 0; i < reducedProducts.Count; i++)
-            {
-                for(int ptm = 0;ptm < ptmDictionary.Count(); ptm++) 
-                {
-                    for (int j = 0; j < reducedProducts.Count; j++)
-                    {
-                        List<MatchedFragmentIon> tempFragmentIons = new();
-
-                        var candidatePTM = new Dictionary<int, Modification>();
-                        candidatePTM.Add(reducedProducts[j].AminoAcidPosition,
-                            new Modification(_monoisotopicMass: ptmDictionary.ToList()[ptm].MonoisotopicMass));
-
-                        var candidate = new PeptideWithSetModifications(
-                            protein: proteinDB[21],
-                            new DigestionParams(), oneBasedStartResidueInProtein: 1,
-                            oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length,
-                            cleavageSpecificity: CleavageSpecificity.Full,
-                            peptideDescription: String.Empty, missedCleavages: 1,
-                            allModsOneIsNterminus: candidatePTM,
-                            numFixedMods: 0);
-                        candidate.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
-                            products: products);
-
-                        var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2ScansList[21],
-                                ms2ScansList[21].SelectedIonMZ.Value,
-                                ms2ScansList[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
-                            products, new CommonParameters());
-                        
-                        if (match.Count > candidates.Last().Item2)
-                        {
-                            candidates.Add(new(match, match.Count));
-                        }
-                        else
-                        {
-                            for (int k = 0; k < ptmDictionary.Count() - 1; ++k)
-                            {
-                                var candidatePTM2 = new Dictionary<int, Modification>();
-                                candidatePTM2.Add(reducedProducts[2].AminoAcidPosition,
-                                    new Modification(_monoisotopicMass: ptmDictionary.ToList()[k].MonoisotopicMass));
-
-                                var candidate2 = new PeptideWithSetModifications(
-                                    protein: proteinDB[21],
-                                    new DigestionParams(), oneBasedStartResidueInProtein: 1,
-                                    oneBasedEndResidueInProtein: proteinDB[21].BaseSequence.Length,
-                                    cleavageSpecificity: CleavageSpecificity.Full,
-                                    peptideDescription: String.Empty, missedCleavages: 1,
-                                    allModsOneIsNterminus: candidatePTM2,
-                                    numFixedMods: 0);
-                                candidate.Fragment(dissociationType: DissociationType.HCD, fragmentationTerminus: FragmentationTerminus.Both,
-                                    products: products);
-
-                                var match2 = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(ms2ScansList[21],
-                                        ms2ScansList[21].SelectedIonMZ.Value,
-                                        ms2ScansList[21].SelectedIonChargeStateGuess.Value, filePath, new CommonParameters()),
-                                    products, new CommonParameters());
-                                if (match.Count > candidates.Last().Item2)
-                                {
-                                    candidates.Add(new(match, match.Count));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
-
 
         public static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
         {
@@ -295,7 +324,7 @@ namespace TaskLayer
                         Console.Write("[");
                         foreach (var candidate in sequence)
                         {
-                            Console.Write(candidate.Key+" , ");
+                            Console.Write(candidate.Key + " , ");
                         }
                         Console.Write("]");
                     }

@@ -12,6 +12,9 @@ using Newtonsoft.Json;
 using Proteomics;
 using TaskLayer;
 using System.Threading.Tasks;
+using Proteomics.Fragmentation;
+using Proteomics.ProteolyticDigestion;
+using UsefulProteomicsDatabases;
 
 namespace Test
 {
@@ -136,6 +139,12 @@ namespace Test
         public void TestMatchSpectra()
         {
             MMGPTMD.MatchSpectra();
+        }
+
+        [Test]
+        public void MMGPTMDRun()
+        {
+            var search = new MMGPTMD();
         }
 
 
