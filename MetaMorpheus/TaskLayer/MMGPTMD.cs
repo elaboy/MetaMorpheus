@@ -69,7 +69,7 @@ namespace TaskLayer
             var tolerance = new PpmTolerance(100);
             PeptidesFromDb = new();
             for(int i = 0; i < ProteinDb.Count; i++)
-            {
+            { 
                 var candidate = new PeptideWithSetModifications(
                     protein: ProteinDb[i],
                     new DigestionParams(), oneBasedStartResidueInProtein: 1,
@@ -708,6 +708,27 @@ namespace TaskLayer
 
         }
 
+        public static List<FilteredPsmTSV> ReadFilteredPsmTSVShort(string path)
+        {
+            List<FilteredPsmTSV> filteredList = new List<FilteredPsmTSV>();
+
+            using (var reader = new StreamReader(path))
+            {
+                reader.ReadLine();
+                string[] lineCheck;
+                while (reader.EndOfStream == false)
+                {
+                    var line = reader.ReadLine().Split('\t');
+                    FilteredPsmTSV filteredPsm = new FilteredPsmTSV(line);
+                    filteredList.Add(filteredPsm);
+                }
+            }
+            return filteredList;
+        }
+    }
+
+    public class ScalableModSearch
+    {
         public static List<FilteredPsmTSV> ReadFilteredPsmTSVShort(string path)
         {
             List<FilteredPsmTSV> filteredList = new List<FilteredPsmTSV>();

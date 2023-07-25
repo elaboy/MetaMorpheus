@@ -186,4 +186,17 @@ namespace Test
         //////}
 
     }
+
+    public sealed class TestScalableModSearch
+    {
+        private const string _filteredPsm = @"D:\08-30-22_bottomup\example.psmtsv";
+        [Test]
+        public void TestReadFilteredPsmTSVShort()
+        {
+            var psmList =
+                ScalableModSearch.ReadFilteredPsmTSVShort(_filteredPsm);
+
+            int i = 0;
+        }
+    }
 }
