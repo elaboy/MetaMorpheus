@@ -196,6 +196,10 @@ namespace Test
             var psmList =
                 ScalableModSearch.ReadFilteredPsmTSVShort(_filteredPsm);
 
+            List<Dictionary<int, Modification>> testing = new();
+
+            ScalableModSearch.GetModsPresentInPsm(@"D:\08-30-22_bottomup\example.psmtsv", out testing);
+            
             int i = 0;
         }
     }

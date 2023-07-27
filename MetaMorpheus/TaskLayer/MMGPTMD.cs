@@ -12,8 +12,11 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks.Dataflow;
+using MathNet.Numerics;
 using Readers.Generated;
 using UsefulProteomicsDatabases;
+using static TorchSharp.torch.optim.lr_scheduler.impl.CyclicLR;
 
 namespace TaskLayer
 {
@@ -455,7 +458,7 @@ namespace TaskLayer
             for (int i = 0; i < psms.Count(); i++)
             {
                 psms[i].PrecursorScanNumber = dataScans[i].OneBasedPrecursorScanNumber.ToString();
-                psms[i].ScanNumber = dataScans[i].OneBasedScanNumber.ToString();
+                psms[i].ScanNumber = (dataScans[i].OneBasedScanNumber).ToString();
             }
             WriteUpdatedFilteredPsmsToTSV(psms, psmFilePath);
         }
@@ -466,7 +469,7 @@ namespace TaskLayer
             {
                 //makes this an enum?
                 string header = "File Name\tScan Number\tPrecursor Scan Number\tScore\tBase Sequence\t" +
-                                "Full Sequence\tMods\tProtein Accession\t " +
+                                "Full Sequence\tMods\tMods Count\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
                                 "Matched Ion Series\tMatched Ion Counts";
@@ -483,6 +486,7 @@ namespace TaskLayer
                         psm.BaseSeq,
                         psm.FullSeq,
                         psm.Mods,
+                        psm.ModsCount,
                         psm.ProteinAccession,
                         psm.ProteinName,
                         psm.GeneName,
@@ -671,7 +675,7 @@ namespace TaskLayer
             {
                 //makes this an enum?
                 string header = "File Name\tScan Number\tPrecursor Scan Number\tScore\tBase Sequence\t" +
-                                "Full Sequence\tMods\tProtein Accession\t " +
+                                "Full Sequence\tMods\tMods Count\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
                                 "Matched Ion Series\tMatched Ion Counts";
@@ -687,6 +691,7 @@ namespace TaskLayer
                         psm.Score.ToString(),
                         psm.BaseSeq,
                         psm.FullSequence,
+                        String.Join(", ", PsmFromTsv.ParseModifications(psm.FullSequence).Select(x => string.Concat(string.Join(", ", x.Value.ToArray()), ", ", Math.Abs(x.Key).ToString())).ToArray()),
                         PsmFromTsv.ParseModifications(psm.FullSequence).Count().ToString(),
                         psm.ProteinAccession,
                         psm.ProteinName,
@@ -745,6 +750,74 @@ namespace TaskLayer
                 }
             }
             return filteredList;
+        }
+
+        public static void GetModsPresentInPsm(string psmPath, out List<Dictionary<int, Modification>> modsFromPsm)
+        {
+            var psms = ReadFilteredPsmTSVShort(psmPath);
+            modsFromPsm = new List<Dictionary<int, Modification>>();
+            var unimod = UsefulProteomicsDatabases.Loaders.LoadUnimod(unimodLocation: "unimod.xml").ToList();
+            foreach (var psm in psms)
+            {
+
+                var dictionary = MMGPTMD.GetModsDictionary();
+                var modsDict = new Dictionary<int, Modification>();
+                var psmSplit = psm.Mods.Split(", ");
+                for (int i = 0; i < psmSplit.Length; i = i)
+                {
+                    bool alreadyAddedI = false;
+                    double modMass = 0;
+                    foreach (var mod in unimod)
+                    {
+
+                        if (psmSplit.Length.IsEven() == false)
+                        {
+                            alreadyAddedI = true;
+                            int counter = 0;
+                            foreach (var residue in psm.BaseSeq.ToCharArray())
+                            {
+                                if (char.Parse(mod.Target.ToString()).Equals(residue))
+                                {
+                                    modsDict.Add(key:counter, value: new Modification(_originalId:mod.OriginalId, _monoisotopicMass:mod.MonoisotopicMass));
+                                    i = i + 2;
+                                    break;
+                                }
+                                counter++;
+                            }
+                        }
+
+                        if (alreadyAddedI == true)
+                            break;
+                        if (psmSplit[i].Contains("Ammonia loss on " + mod.Target))
+                        {
+                            modMass = -17.026549;
+                            break;
+                        }
+                        if (mod.IdWithMotif.Contains(psmSplit[i]))
+                        {
+                            modMass = (double)mod.MonoisotopicMass;
+                            break;
+                        }
+                    }
+
+                    if (alreadyAddedI == false)
+                    {
+                        modsDict.Add(key: Math.Abs(int.Parse(psmSplit[i + 1])), value: new Modification(_monoisotopicMass: modMass));
+                        alreadyAddedI = true;
+                        i = i + 2;
+                    }
+                    if (alreadyAddedI == true)
+                        break;
+                }
+                modsFromPsm.Add(modsDict);
+            }
+        }
+
+        public static void GetAllComboMods(MsDataFile dataFile, List<FilteredPsmTSV> filteredPsmList)
+        {
+            foreach (var psm in filteredPsmList)
+            {
+            }
         }
     }
 }
