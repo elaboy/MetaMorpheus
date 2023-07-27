@@ -197,8 +197,10 @@ namespace Test
                 ScalableModSearch.ReadFilteredPsmTSVShort(_filteredPsm);
 
             List<Dictionary<int, Modification>> testing = new();
+            var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
+            ScalableModSearch.GetAllComboMods(msDataFile, psmList);
 
-            ScalableModSearch.GetModsPresentInPsm(@"D:\08-30-22_bottomup\example.psmtsv", out testing);
+            //ScalableModSearch.GetModsPresentInPsm(@"D:\08-30-22_bottomup\example.psmtsv", out testing);
             
             int i = 0;
         }

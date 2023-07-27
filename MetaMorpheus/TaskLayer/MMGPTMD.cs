@@ -284,6 +284,23 @@ namespace TaskLayer
             return modsDictonary;
         }
 
+        public static Dictionary<string, double> GetModsDictionaryNoAA()
+        {
+            var mods = GetModsFromGptmdThing();
+            var aaDict = new Mods();
+
+            var modsDictonary = new Dictionary<string, double>();
+
+            foreach (var mod in mods)
+            {
+                
+                modsDictonary.Add(key: mod.Target.ToString() + " " + mod.OriginalId, value: (double)mod.MonoisotopicMass);
+                
+            }
+
+            return modsDictonary;
+        }
+
         public static Dictionary<string, double> GetCandidates()
         {
             var mods = GetModsDictionary();
@@ -454,11 +471,15 @@ namespace TaskLayer
 
             MsDataScan[] dataScans = msDataFile.GetMsDataScans();
 
+            int precursorNumber = 1;
+            int scanNumber = 2;
             //Use list instead of Scans GEScansList()
             for (int i = 0; i < psms.Count(); i++)
             {
-                psms[i].PrecursorScanNumber = dataScans[i].OneBasedPrecursorScanNumber.ToString();
-                psms[i].ScanNumber = (dataScans[i].OneBasedScanNumber).ToString();
+                psms[i].PrecursorScanNumber = (precursorNumber).ToString();
+                psms[i].ScanNumber = (scanNumber).ToString();
+                precursorNumber=precursorNumber+2;
+                scanNumber = scanNumber + 2;
             }
             WriteUpdatedFilteredPsmsToTSV(psms, psmFilePath);
         }
@@ -577,7 +598,7 @@ namespace TaskLayer
                             isolationMZ: ms1.IsolationMz, isolationWidth: ms1.IsolationWidth, dissociationType: ms1.DissociationType,
                             hcdEnergy: ms1.HcdEnergy);
 
-                        counter++;
+                        counter = counter + 1;
                         retentionTime++;
                         injectionTime++;
 
@@ -585,12 +606,12 @@ namespace TaskLayer
                         retentionTime: retentionTime, scanWindowRange: ms2.ScanWindowRange, scanFilter: ms2.ScanFilter, mzAnalyzer: ms2.MzAnalyzer,
                         totalIonCurrent: ms2.TotalIonCurrent, injectionTime: injectionTime, noiseData: ms2.NoiseData,
                         nativeId: "controllerType=0 controllerNumber=1 scan=" + counter.ToString(), selectedIonMz: ms2.SelectedIonMZ,
-                        selectedIonChargeStateGuess: ms2.SelectedIonChargeStateGuess, selectedIonIntensity: ms2.SelectedIonIntensity,
-                        isolationMZ: ms2.IsolationMz, isolationWidth: ms2.IsolationWidth, dissociationType: ms2.DissociationType, oneBasedPrecursorScanNumber: precursorNumber,
+                        selectedIonChargeStateGuess: ms1.SelectedIonChargeStateGuess, selectedIonIntensity: ms1.SelectedIonIntensity,
+                        isolationMZ: ms2.IsolationMz, isolationWidth: ms2.IsolationWidth, dissociationType: ms2.DissociationType, oneBasedPrecursorScanNumber:  counter - 1,
                         hcdEnergy: ms2.HcdEnergy);
 
 
-                        counter++;
+                        counter = counter + 1;
                         precursorNumber++;
                         retentionTime++;
                         injectionTime++;
@@ -760,64 +781,40 @@ namespace TaskLayer
             foreach (var psm in psms)
             {
 
-                var dictionary = MMGPTMD.GetModsDictionary();
+                var dictionary = MMGPTMD.GetModsDictionaryNoAA();
                 var modsDict = new Dictionary<int, Modification>();
                 var psmSplit = psm.Mods.Split(", ");
-                for (int i = 0; i < psmSplit.Length; i = i)
+                for (int i = 0; i < psmSplit.Length; i++)
                 {
-                    bool alreadyAddedI = false;
-                    double modMass = 0;
-                    foreach (var mod in unimod)
-                    {
-
-                        if (psmSplit.Length.IsEven() == false)
-                        {
-                            alreadyAddedI = true;
-                            int counter = 0;
-                            foreach (var residue in psm.BaseSeq.ToCharArray())
-                            {
-                                if (char.Parse(mod.Target.ToString()).Equals(residue))
-                                {
-                                    modsDict.Add(key:counter, value: new Modification(_originalId:mod.OriginalId, _monoisotopicMass:mod.MonoisotopicMass));
-                                    i = i + 2;
-                                    break;
-                                }
-                                counter++;
-                            }
-                        }
-
-                        if (alreadyAddedI == true)
-                            break;
-                        if (psmSplit[i].Contains("Ammonia loss on " + mod.Target))
-                        {
-                            modMass = -17.026549;
-                            break;
-                        }
-                        if (mod.IdWithMotif.Contains(psmSplit[i]))
-                        {
-                            modMass = (double)mod.MonoisotopicMass;
-                            break;
-                        }
-                    }
-
-                    if (alreadyAddedI == false)
-                    {
-                        modsDict.Add(key: Math.Abs(int.Parse(psmSplit[i + 1])), value: new Modification(_monoisotopicMass: modMass));
-                        alreadyAddedI = true;
-                        i = i + 2;
-                    }
-                    if (alreadyAddedI == true)
-                        break;
+                    if (psmSplit[i].Contains("Common Artifact:"))
+                        psmSplit[i] = psmSplit[i].Replace("Common Artifact:", "");
+                    else if (psmSplit[i].Contains("Common Fixed:"))
+                        psmSplit[i] = psmSplit[i].Replace("Common Fixed:", "");
+                    else if (psmSplit[i].Contains("Common Biological:"))
+                        psmSplit[i] = psmSplit[i].Replace("Common Biological:", "");
                 }
+                for (int i = 0; i < psmSplit.Length/2; i = i+2)
+                {
+
+                    double monoIsotopicMass = 0;
+                    char target = psmSplit[i][psmSplit[i].Length - 1];
+                    dictionary.TryGetValue(psmSplit[i], out monoIsotopicMass);
+                    modsDict.Add(Math.Abs(int.Parse(psmSplit[i+1])+1), new Modification(_monoisotopicMass: monoIsotopicMass));
+                }
+
                 modsFromPsm.Add(modsDict);
             }
         }
 
         public static void GetAllComboMods(MsDataFile dataFile, List<FilteredPsmTSV> filteredPsmList)
         {
-            foreach (var psm in filteredPsmList)
-            {
-            }
+            //foreach (var psm in filteredPsmList.Where(x => x. != ""))
+            //{
+            //    string baseSequence = psm.BaseSeq;
+            //    var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.PrecursorScanNumber));
+            //    var precursorMass = spectrum.SelectedIonMonoisotopicGuessIntensity;
+
+            //}
         }
     }
 }
