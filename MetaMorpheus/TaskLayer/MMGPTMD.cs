@@ -294,7 +294,7 @@ namespace TaskLayer
             foreach (var mod in mods)
             {
                 
-                modsDictonary.Add(key: mod.Target.ToString() + " " + mod.OriginalId, value: (double)mod.MonoisotopicMass);
+                modsDictonary.Add(key: mod.OriginalId + " on " + mod.Target, value: (double)mod.MonoisotopicMass);
                 
             }
 
@@ -606,7 +606,8 @@ namespace TaskLayer
                         retentionTime: retentionTime, scanWindowRange: ms2.ScanWindowRange, scanFilter: ms2.ScanFilter, mzAnalyzer: ms2.MzAnalyzer,
                         totalIonCurrent: ms2.TotalIonCurrent, injectionTime: injectionTime, noiseData: ms2.NoiseData,
                         nativeId: "controllerType=0 controllerNumber=1 scan=" + counter.ToString(), selectedIonMz: ms2.SelectedIonMZ,
-                        selectedIonChargeStateGuess: ms1.SelectedIonChargeStateGuess, selectedIonIntensity: ms1.SelectedIonIntensity,
+                        selectedIonChargeStateGuess: ms2.SelectedIonChargeStateGuess, selectedIonMonoisotopicGuessMz: ms2.SelectedIonMonoisotopicGuessMz,
+                        selectedIonIntensity: ms2.SelectedIonIntensity,
                         isolationMZ: ms2.IsolationMz, isolationWidth: ms2.IsolationWidth, dissociationType: ms2.DissociationType, oneBasedPrecursorScanNumber:  counter - 1,
                         hcdEnergy: ms2.HcdEnergy);
 
@@ -808,13 +809,53 @@ namespace TaskLayer
 
         public static void GetAllComboMods(MsDataFile dataFile, List<FilteredPsmTSV> filteredPsmList)
         {
-            //foreach (var psm in filteredPsmList.Where(x => x. != ""))
-            //{
-            //    string baseSequence = psm.BaseSeq;
-            //    var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.PrecursorScanNumber));
-            //    var precursorMass = spectrum.SelectedIonMonoisotopicGuessIntensity;
+            var modDB = MMGPTMD.GetModsDictionaryNoAA();
+            foreach (var psm in filteredPsmList)
+            {
+                string baseSequence = psm.BaseSeq;
+                var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
+                var precursorMass = spectrum.SelectedIonMonoisotopicGuessMz*3;
+                var peptide = new PeptideWithSetModifications(protein: new Protein(sequence: psm.BaseSeq, accession: psm.ProteinAccession),new DigestionParams(), oneBasedStartResidueInProtein:1,
+                    oneBasedEndResidueInProtein: psm.BaseSeq.Length, cleavageSpecificity:CleavageSpecificity.Full, peptideDescription:"", missedCleavages:1, allModsOneIsNterminus: new Dictionary<int, Modification>(),
+                    numFixedMods:0);
 
-            //}
+                var deltaMass = precursorMass - peptide.MonoisotopicMass;
+                double modMassCounter = 0;
+                Dictionary<int, Modification> modDictionary= new();
+
+                int aaCounter = 1;
+                for (int i = 0; i < baseSequence.ToCharArray().Length; i++)
+                {
+                    var modsPossibleWithThisResidue = from residue in modDB
+                        where residue.Key.ToCharArray()[residue.Key.ToCharArray().Length - 1].Equals(baseSequence.ToCharArray()[i])
+                        select residue;
+
+                    if (baseSequence[i].Equals('C'))
+                    {
+                        if ((modMassCounter + 57.021464).IsSmaller((double)deltaMass, decimalPlaces: 3))
+                        {
+                            modDictionary.Add(aaCounter, new Modification(_originalId: "Ammonia Loss on C", _monoisotopicMass: -17.026549));
+                            modDictionary.Add(aaCounter+1, new Modification(_originalId: "Carbamidomethylation on C", _monoisotopicMass: 57.021464));
+                            modMassCounter = modMassCounter + 57.021464 + -17.026549;
+                            aaCounter = aaCounter + 2;
+                        }
+                    }
+                    else
+                    {
+                        foreach (var mod in modsPossibleWithThisResidue)
+                        {
+                            if ((mod.Value + modMassCounter).IsSmaller((double)deltaMass, 3))
+                            {
+                                modDictionary.Add(aaCounter, new Modification(_originalId: mod.Key, _monoisotopicMass: mod.Value));
+                                modMassCounter = modMassCounter + mod.Value;
+                                aaCounter = aaCounter + 1;
+                                break;
+                            }
+                        }
+                        aaCounter = aaCounter + 1;
+                    }
+                }
+            }
         }
     }
 }
