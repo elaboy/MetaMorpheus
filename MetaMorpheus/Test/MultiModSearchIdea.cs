@@ -198,10 +198,20 @@ namespace Test
 
             List<Dictionary<int, Modification>> testing = new();
             var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
-            ScalableModSearch.GetAllComboMods(msDataFile, psmList);
+            var results = ScalableModSearch.GetAllComboMods(msDataFile, psmList);
 
+            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> topCount = new();
+
+            foreach (var result in results)
+            {
+                foreach (var pair in result.OrderByDescending(x => x.Value.Count))
+                {
+                   topCount.Add(pair);
+                   break;
+                }
+            }
             //ScalableModSearch.GetModsPresentInPsm(@"D:\08-30-22_bottomup\example.psmtsv", out testing);
-            
+
             int i = 0;
         }
     }
