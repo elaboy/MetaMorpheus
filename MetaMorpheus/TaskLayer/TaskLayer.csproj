@@ -24,6 +24,7 @@
     <PackageReference Include="mzLib" Version="5.0.539.7172023" />
     <PackageReference Include="NetSerializer" Version="4.1.1" />
     <PackageReference Include="Nett" Version="0.15.0" />
+    <PackageReference Include="ScottPlot" Version="4.1.65" />
   </ItemGroup>
 
   <ItemGroup>

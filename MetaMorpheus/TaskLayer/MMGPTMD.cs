@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Data.Common;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks.Dataflow;
@@ -20,6 +21,9 @@ using Readers.Generated;
 using UsefulProteomicsDatabases;
 using static TorchSharp.torch.optim.lr_scheduler.impl.CyclicLR;
 using IsotopicEnvelope = MassSpectrometry.IsotopicEnvelope;
+using ScottPlot;
+using SharpLearning.Containers.Extensions;
+using static Nett.TomlObjectFactory;
 
 namespace TaskLayer
 {
@@ -680,6 +684,8 @@ namespace TaskLayer
                 from psm in psms
                 where psm.QValue <= 0.00001 && psm.PEP <= 0.00001 && psm.DecoyContamTarget.Equals("T") &&
                       PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
+                //where psm.QValue <= 0.001 && psm.PEP <= 0.001 && psm.DecoyContamTarget.Equals("T") &&
+                //      PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
                 select psm;
 
             return filteredPsms;
@@ -786,7 +792,7 @@ namespace TaskLayer
         }
     }
 
-    public class ScalableModSearch
+    public static class ScalableModSearch
     {
         public static List<FilteredPsmTSV> ReadFilteredPsmTSVShort(string path)
         {
@@ -842,6 +848,106 @@ namespace TaskLayer
             }
         }
 
+        public static void GetTopScoreAndSavePng(this
+            List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> getAllComboModsResults,
+            string pathToSavePlots)
+        {
+            var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
+
+            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> topCount = new();
+
+            foreach (var result in getAllComboModsResults)
+            {
+                foreach (var pair in result.OrderByDescending(x => x.Value.Count))
+                {
+                    topCount.Add(pair);
+                    break;
+                }
+            }
+            //ScalableModSearch.GetModsPresentInPsm(@"D:\08-30-22_bottomup\example.psmtsv", out testing);
+
+            foreach (var result in topCount)
+            {
+                MsDataScan scan = msDataFile.GetOneBasedScan(int.Parse(result.Key.PeptideDescription));
+                double[] mz = scan.MassSpectrum.XArray;
+                double[] intesities = scan.MassSpectrum.YArray.Select(x => ScalableModSearch.NormalizeArray(
+                    scan.MassSpectrum.YArray, x)).ToArray();
+
+                var plt = new ScottPlot.Plot(2000, 800);
+                for (int i = 0; i < mz.Length; i++)
+                {
+                    var vlines = new ScottPlot.Plottable.VLineVector();
+                    vlines.Xs = new[] { mz[i] };
+                    vlines.Max = intesities[i];
+                    vlines.Color = Color.DarkGray;
+                    //vlines.PositionLabel = true;
+                    //vlines.PositionLabelBackground = vlines.Color;
+                    plt.Add(vlines);
+
+                }
+
+                var rand = new Random();
+
+                for (int i = 0; i < result.Value.Count(); i++)
+                {
+                    //var arrow = plt.AddArrow(result.Value[i].Mz, intesities[i] + 10, result.Value[i].Mz,
+                    //    intesities[i] + randomValue, lineWidth: 0.5f);
+                    //arrow.Label = result.Value[i].Annotation;
+                    //arrow.Color = Color.Black;
+                    if (result.Value[i].Annotation.ToCharArray()[0].Equals('y'))
+                    {
+                        var randomValue = rand.NextInt64((long)intesities[i] + 10, (long)intesities[i] + 25);
+                        var label = plt.AddText(result.Value[i].Annotation,
+                            result.Value[i].Mz, randomValue);// + randomValue+2);
+                        var line = plt.AddVerticalLine(result.Value[i].Mz, Color.LightCoral);
+                        line.Max = randomValue;
+                        label.Color = Color.Red;
+                    }
+                    else
+                    {
+                        var randomValue = rand.NextInt64((long)intesities[i] + 20, (long)intesities[i] + 30);
+                        var label = plt.AddText(result.Value[i].Annotation,
+                            result.Value[i].Mz, randomValue);// + randomValue+2);
+                        var line = plt.AddVerticalLine(result.Value[i].Mz, Color.LightBlue);
+                        line.Max = randomValue;
+                        label.Color = Color.Blue;
+                    }
+                }
+                //foreach (var ion in result.Value)
+                //{
+                //    var arrow = plt.AddArrow(ion.Mz, ion.Intensity, ion.Mz, ion.Intensity);
+                //    arrow.Label = ion.Annotation;
+                //    arrow.Color = Color.Black;
+
+                //    var label = plt.AddText(ion.Annotation, ion.Mz, ion.Intensity);
+                //    label.Color = Color.Black;
+                //    //plt.AddText(ion.Annotation, ion.Mz, ion.Intensity, color: Color.Red, size: 16);
+                //    //plt.AddMarker(ion.Mz, ion.Intensity, MarkerShape.verticalBar,
+                //    //    label: ion.Annotation);
+                //}
+                plt.AddAnnotation("Theoretical: "+result.Key.MonoisotopicMass + " Da\n" + $"Precursor * charge: {result.Key.Protein.Name} Da",
+                    alignment: Alignment.UpperRight);
+                plt.AddAnnotation(result.Key.Protein.Accession, Alignment.UpperLeft);
+                plt.Title(result.Key.FullSequence + ", " + result.Value.Count() + " matches", size: 10);
+                plt.YLabel("Intensity");
+                plt.XLabel("m/Z");
+                plt.SetAxisLimitsY(0, intesities.Max() + 5);
+                plt.XAxis.Layout(padding: 20);
+                plt.YAxis.Layout(padding: 20);
+                //plt.YAxis.LabelStyle(fontSize: 24);
+                //plt.XAxis.LabelStyle(fontSize: 24);
+                //plt.XAxis2.LabelStyle(fontSize: 36);
+
+                //plt.YAxis.TickLabelStyle(fontSize: 18);
+                //plt.XAxis.TickLabelStyle(fontSize: 18);
+
+                //plt.YAxis.MajorGrid(lineWidth: 2);
+                //plt.XAxis.MajorGrid(lineWidth: 2);
+                plt.SaveFig(@$"{pathToSavePlots}{result.Key.BaseSequence}.png", scale: 10);
+
+            }
+        }
+
         public static List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> GetAllComboMods(
             MsDataFile dataFile,
             List<FilteredPsmTSV> filteredPsmList)
@@ -853,12 +959,13 @@ namespace TaskLayer
             {
                 char[] baseSequence = psm.BaseSeq.ToCharArray();
                 var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
-                var precursorMass = (spectrum.SelectedIonMonoisotopicGuessMz * 3) - (3 * 1.00727647);
+                var precursorMass = ((spectrum.SelectedIonMonoisotopicGuessMz) * spectrum.SelectedIonChargeStateGuess);// -
+                                    //(spectrum.SelectedIonChargeStateGuess * 1.00727647);
                 var peptide = new PeptideWithSetModifications(
                     protein: new Protein(sequence: psm.BaseSeq, accession: psm.ProteinAccession),
                     new DigestionParams(), oneBasedStartResidueInProtein: 1,
                     oneBasedEndResidueInProtein: psm.BaseSeq.Length, cleavageSpecificity: CleavageSpecificity.Full,
-                    peptideDescription: "",
+                    peptideDescription: spectrum.OneBasedScanNumber.ToString(),
                     missedCleavages: 1, allModsOneIsNterminus: new Dictionary<int, Modification>(),
                     numFixedMods: 0);
 
@@ -896,25 +1003,53 @@ namespace TaskLayer
                 //                    where mod.Value.AlmostEqual((double)deltaMass, 2) 
                 //                    select mod;
 
+                //todo: try with the entire db
+                var unimod = UsefulProteomicsDatabases.Loaders.LoadUnimod(unimodLocation: "unimod.xml").ToList();
+
+
                 var modsAvailable = from mod in modDB
                     where baseSequence.Contains(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length-1])
                     select mod;
 
+                var cycles = true;
+                var cycleNum = 0;
                 //start adding the combos to the candidate list
-                foreach (var mod in modsAvailable)
-                {
-                    for (int i = 0; i < baseSequence.Length; i++)
-                    {
-                        if (baseSequence[i].Equals(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length - 1]))
-                        {
-                            var newCandidate = new Dictionary<int, Modification>(preFilledKeyPairs);
+                //while (cycles.Equals(true))
+                //{
+                    var randomNumber = new Random();
 
-                            newCandidate[i + 1] = new Modification(_originalId: mod.Key, _monoisotopicMass: mod.Value);
+                    double originalDeltaMass = (double)deltaMass;
+
+                    var shuffledMods = modsAvailable.ToList();
+                    shuffledMods.Shuffle(randomNumber);
+                    foreach (var mod in shuffledMods)
+                    {
+                        for (int i = 0; i < baseSequence.Length; i++)
+                        {
+                            if (baseSequence[i].Equals(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length - 1]))
+                            {
+                                var newCandidate = new Dictionary<int, Modification>(preFilledKeyPairs);
+
+                                newCandidate[i + 1] = new Modification(_originalId: mod.Key, _monoisotopicMass: mod.Value);
+                                originalDeltaMass = originalDeltaMass + mod.Value;
+                            //if (originalDeltaMass > 1500)
+                            //    break;
+                            //if (originalDeltaMass < cycleNum)
+                            //{
                             candidateMods.Add(newCandidate);
+                            //    cycles = false;
+                            //    break;
+                            //}
+                        }
+
+                            //if (cycles == false)
+                            //    break;
+
                         }
                     }
-                }
-
+                    cycleNum = cycleNum + 1;
+                //}
+                
                 foreach (var mod in candidateMods)
                 {
                     int numberOfMods = (mod.Keys.Count + 1);
@@ -932,11 +1067,12 @@ namespace TaskLayer
                 //fragment and compare the ion count
                 foreach (var candidate in candidateMods)
                 {
+                    //precursor mass embedded in the Protein's object name
                     var modifiedPeptide = new PeptideWithSetModifications(
                         protein: new Protein(sequence: peptide.BaseSequence,
-                            accession: psm.ProteinAccession), new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                            accession: psm.ProteinAccession, name:precursorMass.ToString() +" | " +psm.MatchedIonCounts), new DigestionParams(), oneBasedStartResidueInProtein: 1,
                         oneBasedEndResidueInProtein: peptide.BaseSequence.ToCharArray().Length,
-                        CleavageSpecificity.Full, peptideDescription: "", missedCleavages: 1,
+                        CleavageSpecificity.Full, peptideDescription: spectrum.OneBasedScanNumber.ToString(), missedCleavages: 1,
                         allModsOneIsNterminus: candidate, numFixedMods: 0);
 
                     var products = new List<Product>();
@@ -957,6 +1093,18 @@ namespace TaskLayer
 
             return finalCandidates;
 
+        }
+
+        public static double NormalizeArray(double[] array, double currentValue)
+        {
+            double endOfScale = 1;
+            double topOfScale = 100;
+            double min = array.Min();
+            double max = array.Max();
+
+            var normalized = endOfScale + (currentValue - min) * (topOfScale - endOfScale) / (max - min);
+
+            return normalized;
         }
     }
 }

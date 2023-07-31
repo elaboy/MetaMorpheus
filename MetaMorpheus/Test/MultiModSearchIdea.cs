@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Readers;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Xml.Serialization;
@@ -12,9 +13,15 @@ using Newtonsoft.Json;
 using Proteomics;
 using TaskLayer;
 using System.Threading.Tasks;
+using iText.IO.Source;
+using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
 using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using UsefulProteomicsDatabases;
+using ScottPlot;
+using ScottPlot.Renderable;
+using TorchSharp;
+using MathNet.Numerics.Random;
 
 namespace Test
 {
@@ -198,21 +205,68 @@ namespace Test
 
             List<Dictionary<int, Modification>> testing = new();
             var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
-            var results = ScalableModSearch.GetAllComboMods(msDataFile, psmList);
 
-            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> topCount = new();
+            ScalableModSearch.GetAllComboMods(msDataFile, psmList)
+                .GetTopScoreAndSavePng(pathToSavePlots:@"D:/08-30-22_bottomup/plotImages/");
 
-            foreach (var result in results)
+
+        }
+
+        [Test]
+        public void TestMassSpectrumPlot()
+        {
+            var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
+            MsDataScan scan = msDataFile.GetOneBasedScan(2);
+
+            double[] mz = scan.MassSpectrum.XArray;
+            double[] intensity = scan.MassSpectrum.YArray;
+
+            var plt = new ScottPlot.Plot(1000, 700);
+
+            for (int i = 0; i < mz.Length; i++)
             {
-                foreach (var pair in result.OrderByDescending(x => x.Value.Count))
-                {
-                   topCount.Add(pair);
-                   break;
-                }
+                var vlines = new ScottPlot.Plottable.VLineVector();
+                vlines.Xs = new[] { mz[i] };
+                vlines.Max = intensity[i];
+                vlines.Color = Color.Black;
+                //vlines.PositionLabel = true;
+                //vlines.PositionLabelBackground = vlines.Color;
+                plt.Add(vlines);
             }
-            //ScalableModSearch.GetModsPresentInPsm(@"D:\08-30-22_bottomup\example.psmtsv", out testing);
+            plt.SetAxisLimitsY(0, intensity.Max());
+            plt.SaveFig("msScanTest.png");
 
-            int i = 0;
+        }
+
+        [Test]
+        public void TestVerticalLines()
+        {
+            var plt = new ScottPlot.Plot(600, 400);
+
+            Random rand = new Random(0);
+            double[] xs = DataGen.Random(rand, 50);
+            double[] ys = DataGen.Random(rand, 50);
+
+            //var scatter = plt.AddScatterPoints(xs, ys, Color.Blue, 10);
+
+            var vlines = new ScottPlot.Plottable.VLineVector();
+            vlines.Xs = new double[] { xs[1], xs[12], xs[35] };
+            vlines.Color = Color.Red;
+            vlines.PositionLabel = true;
+            vlines.PositionLabelBackground = vlines.Color;
+
+            var hlines = new ScottPlot.Plottable.HLineVector();
+            hlines.Ys = new double[] { ys[1], ys[12], ys[35] };
+            hlines.Color = Color.DarkCyan;
+            hlines.PositionLabel = true;
+            hlines.PositionLabelBackground = hlines.Color;
+            hlines.DragEnabled = true;
+
+            //plt.Add(scatter);
+            plt.Add(vlines);
+            plt.Add(hlines);
+
+            plt.SaveFig("axisLine_Vector.png");
         }
     }
 }
