@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Chemistry;
+using Easy.Common;
 using iText.StyledXmlParser.Jsoup.Select;
 using MzLibUtil;
 using Proteomics.Fragmentation;
@@ -18,6 +19,7 @@ using TaskLayer;
 using ThermoFisher.CommonCore.Data;
 using UsefulProteomicsDatabases;
 using Easy.Common.Extensions;
+using FlashLFQ;
 
 namespace Test
 {
@@ -44,6 +46,7 @@ namespace Test
             var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML").GetAllScansList().Where(x => x.MsnOrder == 2).ToArray();
             var dataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
             List<Dictionary<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>>> allMatches = new();
+
             foreach(var psm in psmList)
             {
                 var peptideAsProtein = MultiModSearch.GetPeptideAsProtein(psm, fixedMods);
@@ -71,7 +74,7 @@ namespace Test
             int id = 0;
             foreach (var mod in probableMods)
             {
-                var ptm = AddPTMs(psm, mod, fixedMods);
+                var ptm = GetPeptideWithMods(psm,  fixedMods, mod.ToList());
                 foreach (var variant in ptm)
                 {
                     variant.Fragment(spectrum.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both, products);
@@ -141,8 +144,8 @@ namespace Test
             var mods = from mod in modsArray
                        from mod1 in mod
                        from mod2 in mod
-                       //from mod3 in mod
-                       //where psm.BaseSeq.Contains(mod1.Target.ToString()) && psm.BaseSeq.Contains(mod2.Target.ToString())// && psm.BaseSeq.Contains(mod3.Target.ToString())
+                           //from mod3 in mod
+                       where psm.BaseSeq.Contains(mod1.Target.ToString()) && psm.BaseSeq.Contains(mod2.Target.ToString())// && psm.BaseSeq.Contains(mod3.Target.ToString())
                        select mod;
 
             var temp1 = tolerance.GetMaximumValue(deltaMass);
@@ -215,12 +218,8 @@ namespace Test
 
         private static IEnumerable<PeptideWithSetModifications> GetPeptideWithMods(FilteredPsmTSV psm, List<Modification> fixedMods = null, List<Modification> variableMods =null)
         {
-            var peptide =
-                new Protein(psm.BaseSeq, psm.ProteinAccession).Digest(new DigestionParams(protease: "top-down"),
-                    allKnownFixedModifications: fixedMods,
-                    variableModifications: variableMods);
-
-            return peptide;
+            var protein = new Protein(psm.BaseSeq, psm.ProteinAccession);
+            return protein.Digest(new DigestionParams("top-down"), fixedMods, variableMods);
         }
 
         /// <summary>
@@ -248,14 +247,22 @@ namespace Test
         /// Returns all combinations of mods in the database. Currently hard-coded to three mods.
         /// </summary>
         /// <returns></returns>
-        public static IOrderedEnumerable<KeyValuePair<double, Modification[]>> GetPossibleModCombinations()
+        public static IOrderedEnumerable<KeyValuePair<double, Modification[]>> GetPossibleModCombinations(FilteredPsmTSV psm,
+            MsDataFile dataFile, IEnumerable<PeptideWithSetModifications> peptide)
         {
+            var tolerance = new PpmTolerance(40);
+
+            var deltaMass = GetDeltaMass(psm, dataFile, peptide.First());
+
             var commonModsFromToml = GetModsFromGptmdThing().ToList();
             var mods =
                 Loaders.LoadUnimod(
                         @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
+
             commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
+
+            //var modsToAddPredicate = PredicateBuilder.Create<List<Modification>>(mod => mod);
 
             var groupedModsByOriginalId = from one in commonModsFromToml
                                           group one by one.OriginalId
