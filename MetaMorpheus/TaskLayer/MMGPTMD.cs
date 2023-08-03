@@ -7,23 +7,18 @@ using Proteomics;
 using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using Readers;
+using ScottPlot;
+using SharpLearning.Containers.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Data.Common;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks.Dataflow;
-using FlashLFQ;
-using MathNet.Numerics;
-using Readers.Generated;
+using TopDownProteomics;
+using TorchSharp;
 using UsefulProteomicsDatabases;
-using static TorchSharp.torch.optim.lr_scheduler.impl.CyclicLR;
 using IsotopicEnvelope = MassSpectrometry.IsotopicEnvelope;
-using ScottPlot;
-using SharpLearning.Containers.Extensions;
-using static Nett.TomlObjectFactory;
 
 namespace TaskLayer
 {
@@ -508,7 +503,7 @@ namespace TaskLayer
                                 "Full Sequence\tMods\tMods Count\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
-                                "Matched Ion Series\tMatched Ion Counts";
+                                "Matched Ion Series\tMatched Ion Counts\tPrecursor Mass";
 
                 writer.WriteLine(header);
                 foreach (var psm in filteredPsms)
@@ -529,7 +524,8 @@ namespace TaskLayer
                         psm.OrganismName,
                         psm.StartAndEndResiduesInProtein,
                         psm.MatchedIonSeries,
-                        psm.MatchedIonCounts
+                        psm.MatchedIonCounts,
+                        psm.PrecursorMass
                     };
                     writer.WriteLine(string.Join('\t', row));
                 }
@@ -655,7 +651,7 @@ namespace TaskLayer
                 }
             }
 
-            MsDataScan[] scansArray = scanList.Select(x => x).ToArray();
+            MsDataScan[] scansArray = Enumerable.Select(scanList, x => x).ToArray();
 
             return (scansArray, dataFile);
         }
@@ -716,7 +712,7 @@ namespace TaskLayer
                         psm.Ms2ScanNumber.ToString(),
                         psm.PrecursorScanNum.ToString(),
                         psm.RetentionTime.ToString(),
-                        string.Join(' ', psm.MatchedIons.Select(x => x.Annotation).ToArray()),
+                        string.Join(' ', Enumerable.Select(psm.MatchedIons, x => x.Annotation).ToArray()),
                         psm.MatchedIons.Count().ToString()
                     };
                     writer.WriteLine(string.Join('\t', row));
@@ -733,7 +729,7 @@ namespace TaskLayer
                                 "Full Sequence\tMods\tMods Count\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
-                                "Matched Ion Series\tMatched Ion Counts";
+                                "Matched Ion Series\tMatched Ion Counts\tPrecursor Mass";
 
                 writer.WriteLine(header);
                 foreach (var psm in filteredPsms)
@@ -757,8 +753,9 @@ namespace TaskLayer
                         psm.GeneName,
                         psm.OrganismName,
                         psm.StartAndEndResiduesInProtein,
-                        string.Join(' ', psm.MatchedIons.Select(x => x.Annotation).ToArray()),
-                        psm.MatchedIons.Count().ToString()
+                        string.Join(' ', Enumerable.Select(psm.MatchedIons, x => x.Annotation).ToArray()),
+                        psm.MatchedIons.Count().ToString(),
+                        psm.PrecursorMass.ToString()
                     };
                     writer.WriteLine(string.Join('\t', row));
                 }
@@ -792,8 +789,37 @@ namespace TaskLayer
         }
     }
 
-    public static class ScalableModSearch
+    public class ScalableModSearch
     {
+        public List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> CombinationOfModificationsMap { get; set; }
+        public List<torch.Tensor> ComboMassTensors { get; set; }
+
+        public ScalableModSearch(MsDataFile msDataFile, List<FilteredPsmTSV> psmList)
+        {
+            SetCandidateList(msDataFile, psmList);
+        }
+
+        public List<torch.Tensor> SetComboMassTensors()
+        {
+            foreach (var peptide in CombinationOfModificationsMap)
+            {
+                var peptideComboMassList = peptide.Select(x => Enumerable.Select(x.Value, ion => ion.Mz).ToArray()).ToList();
+                //var peptideComboMassTensor = torch.tensor(peptideComboMassList.Select((x => x)).ToArray());
+                foreach (var mod in peptide)
+                {
+
+                }
+            }
+
+            return new List<torch.Tensor>();
+        }
+
+        public void SetCandidateList(MsDataFile msDataFile, List<FilteredPsmTSV> psmList)
+        {
+            CombinationOfModificationsMap = GetAllComboMods(msDataFile, psmList);
+        }
+
+
         public static List<FilteredPsmTSV> ReadFilteredPsmTSVShort(string path)
         {
             List<FilteredPsmTSV> filteredList = new List<FilteredPsmTSV>();
@@ -848,7 +874,7 @@ namespace TaskLayer
             }
         }
 
-        public static void GetTopScoreAndSavePng(this
+        public void GetTopScoreAndSavePng(
             List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> getAllComboModsResults,
             string pathToSavePlots)
         {
@@ -870,7 +896,7 @@ namespace TaskLayer
             {
                 MsDataScan scan = msDataFile.GetOneBasedScan(int.Parse(result.Key.PeptideDescription));
                 double[] mz = scan.MassSpectrum.XArray;
-                double[] intesities = scan.MassSpectrum.YArray.Select(x => ScalableModSearch.NormalizeArray(
+                double[] intesities = Enumerable.Select(scan.MassSpectrum.YArray, x => ScalableModSearch.NormalizeArray(
                     scan.MassSpectrum.YArray, x)).ToArray();
 
                 var plt = new ScottPlot.Plot(2000, 800);
@@ -925,7 +951,7 @@ namespace TaskLayer
                 //    //plt.AddMarker(ion.Mz, ion.Intensity, MarkerShape.verticalBar,
                 //    //    label: ion.Annotation);
                 //}
-                plt.AddAnnotation("Theoretical: "+result.Key.MonoisotopicMass + " Da\n" + $"Precursor * charge: {result.Key.Protein.Name} Da",
+                plt.AddAnnotation("Theoretical: " + result.Key.MonoisotopicMass + " Da\n" + $"Precursor * charge: {result.Key.Protein.Name} Da",
                     alignment: Alignment.UpperRight);
                 plt.AddAnnotation(result.Key.Protein.Accession, Alignment.UpperLeft);
                 plt.Title(result.Key.FullSequence + ", " + result.Value.Count() + " matches", size: 10);
@@ -948,6 +974,157 @@ namespace TaskLayer
             }
         }
 
+        /// <summary>
+        /// Nic's talk on aug1
+        /// </summary>
+        /// <param name="dataFile"></param>
+        /// <param name="filteredPsmList"></param>
+        /// <returns></returns>
+        public static List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> NewGetAllComboMods(
+            MsDataFile dataFile,
+            List<FilteredPsmTSV> filteredPsmList)
+        {
+            List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> finalCandidates = new();
+            var matches = new List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>>();
+
+            foreach (var psm in filteredPsmList)
+            {
+                char[] baseSequence = psm.BaseSeq.ToCharArray();
+                var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
+                var precursorSelectedPrecursorMass =
+                    ((spectrum.SelectedIonMonoisotopicGuessMz) * spectrum.SelectedIonChargeStateGuess); // -
+                //(spectrum.SelectedIonChargeStateGuess * 1.00727647);
+
+                //todo make peptide from psm Base seq and digest with top down protease, that way I have all the properties of the object. Treating the peptide as a protein
+
+                var mods =
+                    Loaders.LoadUnimod(
+                            @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        .ToList();
+                var commonModsFromToml = MMGPTMD.GetModsFromGptmdThing().ToList();
+                commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
+
+                var peptideProteinDigest =
+                    new Protein(psm.BaseSeq, psm.ProteinAccession).Digest(new DigestionParams(protease: "top-down"),
+                        allKnownFixedModifications: new List<Modification>()
+                            { mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")) },
+                        variableModifications: new List<Modification>());
+
+
+
+                var modifiedPeptide = new PeptideWithSetModifications(
+                   peptideProteinDigest.First().Protein, new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                    oneBasedEndResidueInProtein: peptideProteinDigest.First().BaseSequence.Length,
+                    CleavageSpecificity.Full, peptideDescription: spectrum.OneBasedScanNumber.ToString(), missedCleavages: 1,
+                    allModsOneIsNterminus: peptideProteinDigest.First().AllModsOneIsNterminus, numFixedMods: peptideProteinDigest.First().NumFixedMods);
+
+                var nakedProteinMass = new Protein(psm.BaseSeq, psm.ProteinAccession).Digest(new DigestionParams(protease: "top-down"),
+                    allKnownFixedModifications: new List<Modification>(),
+                    variableModifications: new List<Modification>());
+
+                double TheoPrecursorMassWithMods = modifiedPeptide.MonoisotopicMass;
+
+                var products = new List<Product>();
+
+                modifiedPeptide.Fragment(dissociationType: DissociationType.HCD,
+                    fragmentationTerminus: FragmentationTerminus.Both, products: products);
+
+                var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(
+                    mzLibScan: spectrum, precursorMonoisotopicPeakMz: spectrum.SelectedIonMZ.Value,
+                    precursorCharge: spectrum.SelectedIonChargeStateGuess.Value, fullFilePath: @"D:\08-30-22_bottomup\test.mzML\",
+                    new CommonParameters()), products, new CommonParameters());
+
+                var deltaMass = precursorSelectedPrecursorMass - modifiedPeptide.MonoisotopicMass;
+
+                int numberOfMaxMods = 3;
+
+                int numberOfAttempts = 15;
+
+                var tolerance = new PpmTolerance(15);
+
+                List<Modification> fixedMod = new List<Modification>()
+                    { mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")) };
+
+                var possibles = from one in mods
+                                from two in mods
+                                //from three in commonModsFromToml
+
+                                where tolerance.Within((double)deltaMass, (one.MonoisotopicMass.Value + two.MonoisotopicMass.Value))// + three.MonoisotopicMass.Value))
+                                && nakedProteinMass.First().BaseSequence.Contains(one.Target.ToString()) && nakedProteinMass.First().BaseSequence.Contains(two.Target.ToString())
+                                && !one.IdWithMotif.Equals(fixedMod.Select(x => x)) && !two.IdWithMotif.Equals(fixedMod.Select(x => x))
+                                //&& nakedProteinMass.First().BaseSequence.Contains(three.Target.ToString())
+
+                                select new KeyValuePair<double, Modification[]>((one.MonoisotopicMass.Value+two.MonoisotopicMass.Value),//+three.MonoisotopicMass.Value),
+                                        value: new[]{one,two});
+
+                var groupedByMass = from mod in commonModsFromToml
+                                                group mod by mod.MonoisotopicMass
+                                                into newGroup
+                                                select newGroup;
+
+                var groupedModsByOriginalId = from one in commonModsFromToml
+                    group one by one.OriginalId
+                    into newGroup
+                    select newGroup;
+                    //select new KeyValuePair<double, Modification[]>((one.MonoisotopicMass.Value + two.MonoisotopicMass.Value),//+three.MonoisotopicMass.Value),
+                    //    value: new[] { one, two });
+
+                    var combos = (from grouped1 in groupedModsByOriginalId
+                        from grouped2 in groupedModsByOriginalId
+                        select new KeyValuePair<double, Modification[]>(
+                            (grouped1.First().MonoisotopicMass.Value + grouped2.First().MonoisotopicMass.Value),
+                            new[] { grouped1.First(), grouped2.First() })).OrderBy(x => x.Key);
+
+                    //var combosSorted = combos.ToImmutableSortedDictionary();
+
+                    foreach (var possibility in possibles)
+                {
+                    var candidate = possibility.Value.Select(x => x).ToList();
+
+                    var candidatePeptide  =
+                        new Protein(psm.BaseSeq, psm.ProteinAccession).Digest(new DigestionParams(protease: "top-down"),
+                            allKnownFixedModifications: fixedMod,
+                            variableModifications: candidate);
+
+                    var candidateFragmentation = new PeptideWithSetModifications(
+                        candidatePeptide.First().Protein, new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                        oneBasedEndResidueInProtein: candidatePeptide.First().BaseSequence.Length,
+                        CleavageSpecificity.Full, peptideDescription: spectrum.OneBasedScanNumber.ToString(), missedCleavages: 1,
+                        allModsOneIsNterminus: candidatePeptide.First().AllModsOneIsNterminus, numFixedMods: candidatePeptide.First().NumFixedMods);
+
+                    candidateFragmentation.Fragment(dissociationType: DissociationType.HCD,
+                        fragmentationTerminus: FragmentationTerminus.Both, products: products);
+
+                    var candidateMatch = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(
+                        mzLibScan: spectrum, precursorMonoisotopicPeakMz: spectrum.SelectedIonMZ.Value,
+                        precursorCharge: spectrum.SelectedIonChargeStateGuess.Value, fullFilePath: @"D:\08-30-22_bottomup\test.mzML\",
+                        new CommonParameters()), products, new CommonParameters());
+                    
+                    var candidateDict = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
+
+                    candidateDict.Add(candidateFragmentation, candidateMatch);
+                    matches.Add(candidateDict);
+
+                }
+
+                break;
+            }
+            return matches;
+
+        }
+
+        private static IEnumerable<IEnumerable<T>> CartesianProduct<T>(IEnumerable<IEnumerable<T>> sequences)
+        {
+            IEnumerable<IEnumerable<T>> emptyProduct = new[] { Enumerable.Empty<T>() };
+            return sequences.Aggregate(
+                emptyProduct,
+                (accumulator, sequence) =>
+                    from accseq in accumulator
+                    from item in sequence
+                    select accseq.Concat(new[] { item })
+            );
+        }
+
         public static List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> GetAllComboMods(
             MsDataFile dataFile,
             List<FilteredPsmTSV> filteredPsmList)
@@ -960,7 +1137,21 @@ namespace TaskLayer
                 char[] baseSequence = psm.BaseSeq.ToCharArray();
                 var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
                 var precursorMass = ((spectrum.SelectedIonMonoisotopicGuessMz) * spectrum.SelectedIonChargeStateGuess);// -
-                                    //(spectrum.SelectedIonChargeStateGuess * 1.00727647);
+                                                                                                                       //(spectrum.SelectedIonChargeStateGuess * 1.00727647);
+
+                //todo make peptide from psm Base seq and digest with top down protease, that way I have all the properties of the object. Treating the peptide as a protein
+                //from here
+
+                var mods =
+                    Loaders.LoadUnimod(
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml").ToList();
+                ////var mods = MMGPTMD.GetModsFromGptmdThing().ToList();
+                var peptideProtein =
+                    new Protein(psm.BaseSeq, psm.ProteinAccession).Digest(new DigestionParams(protease: "top-down"),
+                        allKnownFixedModifications: new List<Modification>() { mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")) },
+                        variableModifications: new List<Modification>());
+                //to here 
+
                 var peptide = new PeptideWithSetModifications(
                     protein: new Protein(sequence: psm.BaseSeq, accession: psm.ProteinAccession),
                     new DigestionParams(), oneBasedStartResidueInProtein: 1,
@@ -1004,34 +1195,35 @@ namespace TaskLayer
                 //                    select mod;
 
                 //todo: try with the entire db
+
                 var unimod = UsefulProteomicsDatabases.Loaders.LoadUnimod(unimodLocation: "unimod.xml").ToList();
 
 
                 var modsAvailable = from mod in modDB
-                    where baseSequence.Contains(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length-1])
-                    select mod;
+                                    where baseSequence.Contains(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length - 1])
+                                    select mod;
 
                 var cycles = true;
                 var cycleNum = 0;
                 //start adding the combos to the candidate list
                 //while (cycles.Equals(true))
                 //{
-                    var randomNumber = new Random();
+                var randomNumber = new Random();
 
-                    double originalDeltaMass = (double)deltaMass;
+                double originalDeltaMass = (double)deltaMass;
 
-                    var shuffledMods = modsAvailable.ToList();
-                    shuffledMods.Shuffle(randomNumber);
-                    foreach (var mod in shuffledMods)
+                var shuffledMods = modsAvailable.ToList();
+                shuffledMods.Shuffle(randomNumber);
+                foreach (var mod in shuffledMods)
+                {
+                    for (int i = 0; i < baseSequence.Length; i++)
                     {
-                        for (int i = 0; i < baseSequence.Length; i++)
+                        if (baseSequence[i].Equals(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length - 1]))
                         {
-                            if (baseSequence[i].Equals(mod.Key.ToCharArray()[mod.Key.ToCharArray().Length - 1]))
-                            {
-                                var newCandidate = new Dictionary<int, Modification>(preFilledKeyPairs);
+                            var newCandidate = new Dictionary<int, Modification>(preFilledKeyPairs);
 
-                                newCandidate[i + 1] = new Modification(_originalId: mod.Key, _monoisotopicMass: mod.Value);
-                                originalDeltaMass = originalDeltaMass + mod.Value;
+                            newCandidate[i + 1] = new Modification(_originalId: mod.Key, _monoisotopicMass: mod.Value);
+                            originalDeltaMass = originalDeltaMass + mod.Value;
                             //if (originalDeltaMass > 1500)
                             //    break;
                             //if (originalDeltaMass < cycleNum)
@@ -1042,14 +1234,14 @@ namespace TaskLayer
                             //}
                         }
 
-                            //if (cycles == false)
-                            //    break;
+                        //if (cycles == false)
+                        //    break;
 
-                        }
                     }
-                    cycleNum = cycleNum + 1;
+                }
+                cycleNum = cycleNum + 1;
                 //}
-                
+
                 foreach (var mod in candidateMods)
                 {
                     int numberOfMods = (mod.Keys.Count + 1);
@@ -1070,7 +1262,7 @@ namespace TaskLayer
                     //precursor mass embedded in the Protein's object name
                     var modifiedPeptide = new PeptideWithSetModifications(
                         protein: new Protein(sequence: peptide.BaseSequence,
-                            accession: psm.ProteinAccession, name:precursorMass.ToString() +" | " +psm.MatchedIonCounts), new DigestionParams(), oneBasedStartResidueInProtein: 1,
+                            accession: psm.ProteinAccession, name: precursorMass.ToString() + " | " + psm.MatchedIonCounts), new DigestionParams(), oneBasedStartResidueInProtein: 1,
                         oneBasedEndResidueInProtein: peptide.BaseSequence.ToCharArray().Length,
                         CleavageSpecificity.Full, peptideDescription: spectrum.OneBasedScanNumber.ToString(), missedCleavages: 1,
                         allModsOneIsNterminus: candidate, numFixedMods: 0);

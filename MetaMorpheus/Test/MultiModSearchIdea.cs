@@ -197,6 +197,7 @@ namespace Test
     public sealed class TestScalableModSearch
     {
         private const string _filteredPsm = @"D:\08-30-22_bottomup\example.psmtsv";
+
         [Test]
         public void TestReadFilteredPsmTSVShort()
         {
@@ -206,10 +207,25 @@ namespace Test
             List<Dictionary<int, Modification>> testing = new();
             var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
 
-            ScalableModSearch.GetAllComboMods(msDataFile, psmList)
-                .GetTopScoreAndSavePng(pathToSavePlots:@"D:/08-30-22_bottomup/plotImages/");
+            ScalableModSearch.NewGetAllComboMods(msDataFile, psmList);
+            //.GetTopScoreAndSavePng(pathToSavePlots:@"D:/08-30-22_bottomup/plotImages/");
 
 
+        }
+
+        [Test]
+        public void TestSetCandidateList()
+        {
+            var psmList = ScalableModSearch.ReadFilteredPsmTSVShort(_filteredPsm);
+            var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
+
+            var mods =
+                Loaders.LoadUnimod(
+                    @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml");
+
+            var search = new ScalableModSearch(msDataFile, psmList);
+
+            Console.WriteLine();
         }
 
         [Test]

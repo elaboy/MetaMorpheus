@@ -17,6 +17,7 @@
         public string StartAndEndResiduesInProtein;
         public string MatchedIonSeries;
         public string MatchedIonCounts;
+        public string PrecursorMass;
         public FilteredPsmTSV(string[] psm)
         {
             FileName = psm[0];
@@ -34,6 +35,7 @@
             StartAndEndResiduesInProtein = psm[12];
             MatchedIonSeries = psm[13];
             MatchedIonCounts = psm[14];
+            PrecursorMass = psm[15];
         }
     }
 
