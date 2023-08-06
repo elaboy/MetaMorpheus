@@ -7,9 +7,12 @@ using Proteomics;
 using Proteomics.ProteolyticDigestion;
 using Readers;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Chemistry;
 using Easy.Common;
 using iText.StyledXmlParser.Jsoup.Select;
@@ -19,7 +22,10 @@ using TaskLayer;
 using ThermoFisher.CommonCore.Data;
 using UsefulProteomicsDatabases;
 using Easy.Common.Extensions;
+using EngineLayer.Gptmd;
 using FlashLFQ;
+using MathNet.Numerics;
+using SharpLearning.Containers.Extensions;
 
 namespace Test
 {
@@ -30,7 +36,6 @@ namespace Test
         [Test]
         public void TestMultiModSearch()
         {
-            var possibilities = MultiModSearch.GetPossibleModCombinations();
             var mods =
                 Loaders.LoadUnimod(
                         @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
@@ -51,8 +56,11 @@ namespace Test
             {
                 var peptideAsProtein = MultiModSearch.GetPeptideAsProtein(psm, fixedMods);
 
-                var matches = MultiModSearch.GetPeptideFragmentIonsMatches(psm, dataFile, possibilities, fixedMods);
-                allMatches.Add(matches);
+                var possibilities = MultiModSearch.GetPossibleModCombinations(psm, peptideAsProtein, 3);
+
+
+                //var matches = MultiModSearch.GetPeptideFragmentIonsMatches(psm, dataFile, possibilities, fixedMods);
+                //allMatches.Add(matches);
             }
         }
     }
@@ -112,7 +120,7 @@ namespace Test
         /// Returns the mass difference between chosen precursor ion and given peptide.
         /// </summary>
         /// <returns></returns>
-        private static double GetDeltaMass(FilteredPsmTSV psm, MsDataFile dataFile, PeptideWithSetModifications peptide)
+        private static double GetDeltaMass(FilteredPsmTSV psm, PeptideWithSetModifications peptide)
         {
             //var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
             var precursorMass = double.Parse(psm.PrecursorMass);
@@ -135,7 +143,7 @@ namespace Test
         {
             var tolerance = new PpmTolerance(40);
 
-            var deltaMass = GetDeltaMass(psm, dataFile, peptide.First());
+            var deltaMass = GetDeltaMass(psm, peptide.First());
 
             var massArray = possibleMods.Select(x => x.Key).ToArray();
 
@@ -160,7 +168,31 @@ namespace Test
 
             return rangeOfPossibleMods;
         }
+        private static List<Modification[]> GetModificationsWithinDelta(
+            IEnumerable<PeptideWithSetModifications> peptide, FilteredPsmTSV psm, MsDataFile dataFile, int numberOfVariableMods)
+        {
+            var tolerance = new PpmTolerance(40);
+            
 
+            var deltaMass = GetDeltaMass(psm, peptide.First());
+
+            var commonModsFromToml = GetModsFromGptmdThing().ToList();
+            var mods =
+                Loaders.LoadUnimod(
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                    .ToList();
+
+            commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
+
+            var groupedModsByOriginalId = (from one in commonModsFromToml
+                group one by one.OriginalId
+                into newGroup
+                select newGroup).ToList();
+
+            List<Modification[]> listOfMods = new();
+
+            return new List<Modification[]>();
+        }
 
         /// <summary>
         /// Returns collection of custom psms. These are part of a custom class for development, not for production.
@@ -238,23 +270,22 @@ namespace Test
             return peptideProteinDigest;
         }
 
-        private double GetDeltaMass()
-        {
-            return 0;
-        }
 
         /// <summary>
         /// Returns all combinations of mods in the database. Currently hard-coded to three mods.
         /// </summary>
         /// <returns></returns>
-        public static IOrderedEnumerable<KeyValuePair<double, Modification[]>> GetPossibleModCombinations(FilteredPsmTSV psm,
-            MsDataFile dataFile, IEnumerable<PeptideWithSetModifications> peptide)
+        public static List<IGrouping<string, Modification>> GetPossibleModCombinations(FilteredPsmTSV psm,
+                IEnumerable<PeptideWithSetModifications> peptide, int numberOfVariableMods)
         {
-            var tolerance = new PpmTolerance(40);
+            //var tolerance = new PpmTolerance(40);
 
-            var deltaMass = GetDeltaMass(psm, dataFile, peptide.First());
+            //var deltaMass = GetDeltaMass(psm, dataFile, peptide.First());
 
-            var commonModsFromToml = GetModsFromGptmdThing().ToList();
+            var commonModsFromToml = GetModsFromGptmdThing()
+                .Where(mod => mod.Target.ToString().Contains('X') || 
+                              peptide.First().BaseSequence.Contains(mod.Target.ToString())).ToList();
+
             var mods =
                 Loaders.LoadUnimod(
                         @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
@@ -264,19 +295,36 @@ namespace Test
 
             //var modsToAddPredicate = PredicateBuilder.Create<List<Modification>>(mod => mod);
 
-            var groupedModsByOriginalId = from one in commonModsFromToml
-                                          group one by one.OriginalId
-                into newGroup
-                                          select newGroup;
+            var deltaMass = GetDeltaMass(psm, peptide.First());
 
-            var modCombos = (from grouped1 in groupedModsByOriginalId
-                             from grouped2 in groupedModsByOriginalId
-                             //from grouped3 in groupedModsByOriginalId
-                             select new KeyValuePair<double, Modification[]>(
-                                 (grouped1.First().MonoisotopicMass.Value + grouped2.First().MonoisotopicMass.Value),// + grouped3.First().MonoisotopicMass.Value),
-                                 new[] { grouped1.First(), grouped2.First()})).OrderBy(x => x.Key);
+            var modsGroupedByOriginalId = commonModsFromToml.GroupBy(modId => modId.OriginalId);
 
-            return modCombos;
+            List<KeyValuePair<double, Modification[]>> modsToSort = new();
+
+
+            var test = MathNet.Numerics.Combinatorics.SelectCombinationWithRepetition(modsGroupedByOriginalId, 3).ToList();
+
+            return test;
+
+
+            //Enumerable.Repeat(1, numberOfVariableMods + 1)
+            //    .Select(x => modsGroupedByOriginalId);
+
+            //var modCombos = groupedModsByOriginalId.SelectMany(grouped1 => groupedModsByOriginalId,
+            //    (grouped1, grouped2) => new KeyValuePair<double, Modification[]>(
+            //        (grouped1.First().MonoisotopicMass.Value +
+            //         grouped2.First().MonoisotopicMass.Value), // + grouped3.First().MonoisotopicMass.Value),
+            //        new[] { grouped1.First(), grouped2.First() }));//.OrderBy(x => x.Key);
+
+            //var modCombos = from grouped1 in groupedModsByOriginalId
+            //    from grouped2 in groupedModsByOriginalId
+            //    //from grouped3 in groupedModsByOriginalId
+            //    select new KeyValuePair<double, Modification[]>(
+            //        (grouped1.First().MonoisotopicMass.Value +
+            //         grouped2.First().MonoisotopicMass.Value), // + grouped3.First().MonoisotopicMass.Value),
+            //        new[] { grouped1.First(), grouped2.First() });//.OrderBy(x => x.Key);
+
+            //return modCombos;
         }
 
         /// <summary>
