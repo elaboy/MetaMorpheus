@@ -35,7 +35,7 @@ namespace Test
         {
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             int maxToAdd = 3;
@@ -49,8 +49,8 @@ namespace Test
             var dataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
             List<Dictionary<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>>> allMatches = new();
 
-            for(int i = 1; i < 8; i++) 
-            { 
+            Parallel.ForEach(Enumerable.Range(1, 8), i =>
+            {
                 Parallel.ForEach(psmList, psm =>
                 {
                     var peptideAsProtein = MultiModSearch.GetPeptideAsProtein(psm, mods);
@@ -61,7 +61,7 @@ namespace Test
                     var matches = MultiModSearch.GetPeptideFragmentIonsMatches(psm, dataFile, possibilities, mods);
                     allMatches.Add(matches);
                 });
-            }
+            });
         }
     }
 
@@ -380,7 +380,7 @@ namespace Test
 
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
