@@ -15,7 +15,11 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Metadata;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Serialization;
 using Easy.Common;
 using Easy.Common.Extensions;
 using Easy.Common.Interfaces;
@@ -23,6 +27,9 @@ using pepXML.Generated;
 using Proteomics.AminoAcidPolymer;
 using TaskLayer;
 using UsefulProteomicsDatabases;
+using NetSerializer;
+using OxyPlot;
+using ScottPlot.Plottable;
 
 namespace Test
 {
@@ -35,7 +42,7 @@ namespace Test
         {
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             int maxToAdd = 3;
@@ -47,22 +54,39 @@ namespace Test
 
             var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML").GetAllScansList().Where(x => x.MsnOrder == 2).ToArray();
             var dataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
-            List<Dictionary<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>>> allMatches = new();
+            List<KeyValuePair<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>>> allMatches = new();
 
-            Parallel.ForEach(Enumerable.Range(1, 8), i =>
+            for(int i = 1; i < 8;  i++)
             {
-                Parallel.ForEach(psmList, psm =>
+                foreach (var psm in psmList)
                 {
-                    var peptideAsProtein = MultiModSearch.GetPeptideAsProtein(psm, mods);
+                    var peptideAsProtein = MultiModSearch.GetPeptideAsProtein(psm, fixedMods);
 
                     var possibilities = MultiModSearch.GetPossibleModCombinations(psm, peptideAsProtein, i);
 
 
-                    var matches = MultiModSearch.GetPeptideFragmentIonsMatches(psm, dataFile, possibilities, mods);
-                    allMatches.Add(matches);
-                });
-            });
+                    var matches = MultiModSearch.GetPeptideFragmentIonsMatches(psm, dataFile, possibilities, fixedMods);
+                    var top = matches.OrderBy(x => x.Value.Count);
+                    var selected = top.Last();
+                    allMatches.Add(selected);
+                }
+            }
+
+            var orderedMatches = allMatches.OrderBy(x => x.Value.Count()).GroupBy(x => x.Key.Item2.Protein.BaseSequence).ToList()
+                .Select(x => new XMLGroup(){GroupName = x.Key, mods = new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(x.First().Key.Item2,x.First().Value)});
+
+            
+
+
         }
+    }
+
+    public class XMLGroup
+    {
+        public string GroupName { get; set; }
+        public KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>> mods { get; set; }
+        
+        internal XMLGroup() {}
     }
 
     public class MultiModSearch
@@ -181,7 +205,7 @@ namespace Test
             var commonModsFromToml = GetModsFromGptmdThing().ToList();
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
@@ -380,14 +404,14 @@ namespace Test
 
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
 
             var deltaMass = GetDeltaMass(psm, peptide.First());
 
-            var modsGroupedByOriginalId = mods.GroupBy(modId => modId.IdWithMotif);
+            var modsGroupedByOriginalId = commonModsFromToml.GroupBy(modId => modId.IdWithMotif);
 
             return GetKCombinations(modsGroupedByOriginalId, 3).OrderBy(x => x.Key);
         }
