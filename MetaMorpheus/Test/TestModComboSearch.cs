@@ -8,28 +8,14 @@ using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using Readers;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Reflection;
-using System.Reflection.Metadata;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.Serialization;
-using Easy.Common;
-using Easy.Common.Extensions;
-using Easy.Common.Interfaces;
-using pepXML.Generated;
-using Proteomics.AminoAcidPolymer;
+using ExCSS;
+using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
 using TaskLayer;
 using UsefulProteomicsDatabases;
-using NetSerializer;
-using OxyPlot;
-using ScottPlot.Plottable;
 
 namespace Test
 {
@@ -42,102 +28,139 @@ namespace Test
         {
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
-            int maxToAdd = 3;
+            int maxToAdd = 7;
             var fixedMods = new List<Modification>();
             fixedMods.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
+
+            var commonVariableMods = MultiModSearch.GetModsFromGptmdThing().ToList();
 
             var psmList =
                 MultiModSearch.ReadFilteredPsmTSVShort(_filteredPsm);
 
-            var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML").GetAllScansList().Where(x => x.MsnOrder == 2).ToArray();
+            var msDataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML").GetAllScansList()
+                .Where(x => x.MsnOrder == 2).ToArray();
             var dataFile = MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
-            List<KeyValuePair<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>>> allMatches = new();
+            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> allMatches = new();
+            List<FilteredPsmTSV> notBetter = new();
 
-            for(int i = 1; i < 8;  i++)
+            for (int i = 1; i < maxToAdd + 1; i++)
             {
-                foreach (var psm in psmList)
+                var modSearch = new MultiModSearch(commonVariableMods, i);
+
+                List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> tempMatches = new();
+
+                Parallel.ForEach(psmList, psm =>
                 {
                     var peptideAsProtein = MultiModSearch.GetPeptideAsProtein(psm, fixedMods);
+                    var matches = modSearch.GetPeptideFragmentIonsMatches(psm, dataFile, fixedMods);
+                    var top = matches.OrderByDescending(x => x.Value.Count);
+                    if (matches.Count is 0)
+                        return;
+                    var selected = top.First();
 
-                    var possibilities = MultiModSearch.GetPossibleModCombinations(psm, peptideAsProtein, i);
+                    tempMatches.Add(selected);
+                });
 
+                var orderedMatches = tempMatches.OrderByDescending(x => x.Value.Count())
+                    .GroupBy(x => x.Key.Protein.BaseSequence)
+                    .Select(x => new Comparing()
+                    {
+                        mmMatchCount = int.Parse(psmList
+                            .Find(psm => x.Key
+                                .Equals(psm.BaseSeq)).MatchedIonCounts),
+                        myMatchCount = x.OrderByDescending(x => x.Value.Count)
+                            .First().Value.Count,
+                        peptideSequence = x.Key
+                    });
 
-                    var matches = MultiModSearch.GetPeptideFragmentIonsMatches(psm, dataFile, possibilities, fixedMods);
-                    var top = matches.OrderBy(x => x.Value.Count);
-                    var selected = top.Last();
-                    allMatches.Add(selected);
+                foreach (var match in orderedMatches)
+                {
+                    if(match.myMatchCount < int.Parse(psmList.Find(psm => psm.BaseSeq.Equals(match.peptideSequence)).MatchedIonCounts))
+                    {
+                        notBetter.Add(psmList.Find(psm => psm.BaseSeq.Equals(match.peptideSequence)));
+                    }
                 }
+
+                psmList = notBetter;
+
+                tempMatches.ForEach(x => allMatches
+                        .Add(new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(x.Key, x.Value)));
             }
 
-            var orderedMatches = allMatches.OrderBy(x => x.Value.Count()).GroupBy(x => x.Key.Item2.Protein.BaseSequence).ToList()
-                .Select(x => new XMLGroup(){GroupName = x.Key, mods = new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(x.First().Key.Item2,x.First().Value)});
-
-            
-
-
+            int zero = 0;
         }
+    }
+
+    public class Comparing
+    {
+        public string peptideSequence { get; set; }
+        public int mmMatchCount {get; set; }
+        public int myMatchCount { get; set; }
+
     }
 
     public class XMLGroup
     {
         public string GroupName { get; set; }
         public KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>> mods { get; set; }
-        
-        internal XMLGroup() {}
+
+        internal XMLGroup() { }
     }
 
     public class MultiModSearch
     {
-        public static Dictionary<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>> GetPeptideFragmentIonsMatches(FilteredPsmTSV psm, MsDataFile dataFile,
-            IOrderedEnumerable<KeyValuePair<double, Modification[]>> possibleMods, List<Modification> fixedMods)
+        public  KeyValuePair<double, Modification[]>[] CombinationsFromDatabase { get; set; }
+        public  IOrderedEnumerable<IGrouping<string, Modification>> ModificationGroups { get; set; }
+        public double[] MassArray { get; set; }
+
+        public MultiModSearch(List<Modification> listOfMods, int numberOfVariableMods)
         {
-            Dictionary<Tuple<int, PeptideWithSetModifications>, List<MatchedFragmentIon>> results = new();
+            ModificationGroups = SetModsGroup(listOfMods);
+            CombinationsFromDatabase = SetKCombinations(ModificationGroups, numberOfVariableMods).Distinct().ToArray();
+            MassArray = CombinationsFromDatabase.Select(x => x.Key).ToArray();
+        }
+
+        public List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> GetPeptideFragmentIonsMatches(FilteredPsmTSV psm, MsDataFile dataFile, List<Modification> fixedMods)
+        {
+            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> results = new();
 
             var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
             //var neutralMass = spectrum.SelectedIonMZ.Value.ToMass(spectrum.SelectedIonChargeStateGuess.Value);
 
-            var probableMods =
-                GetCombinationsThatFitDelta(possibleMods, GetPeptideWithMods(psm, fixedMods), psm, dataFile);
+            var peptide = GetPeptideWithMods(psm, fixedMods);
 
-            var products = new List<Product>();
+            var deltaMass = GetDeltaMass(psm, peptide.First());
+
+            if (deltaMass < 1)
+                return results;
+
+            var probableMods =
+                GetCombinationsThatFitDelta(deltaMass);
+
+            //var products = new List<Product>();
             int id = 0;
-            foreach (var mod in probableMods)
+            foreach(var mod in probableMods)
             {
+                var products = new List<Product>();
                 var ptm = GetPeptideWithMods(psm, fixedMods, mod.ToList());
                 foreach (var variant in ptm)
                 {
-                    variant.Fragment(spectrum.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both, products);
+                    variant.Fragment(spectrum.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both,
+                        products);
 
                     var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(spectrum,
                         double.Parse(psm.PrecursorMass),
                         spectrum.SelectedIonChargeStateGuess.Value, dataFile.FilePath,
                         new CommonParameters()), products, new CommonParameters());
 
-                    results.Add(new Tuple<int, PeptideWithSetModifications>(id, variant), match);
+                    results.Add(new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(variant, match));
                     id = id + 1;
                 }
-
-
             }
             return results;
-        }
-
-
-
-        private static IEnumerable<PeptideWithSetModifications> AddPTMs(FilteredPsmTSV psm, Modification[] mods, List<Modification> fixedMods)
-        {
-            var peptides = GetPeptideWithMods(psm, fixedMods, mods.ToList());
-
-            return peptides.Select(peptide => new PeptideWithSetModifications(peptide.Protein, new DigestionParams(),
-                oneBasedStartResidueInProtein: 1, oneBasedEndResidueInProtein: peptide.BaseSequence.Length,
-                CleavageSpecificity.Full, "", 0, peptide.AllModsOneIsNterminus, peptide.NumFixedMods));
-
-            //return new PeptideWithSetModifications(peptide.Protein, new DigestionParams(),
-            //    oneBasedStartResidueInProtein: 1, oneBasedEndResidueInProtein: peptide.BaseSequence.Length,
-            //    CleavageSpecificity.Full, "", 0, peptide.AllModsOneIsNterminus, peptide.NumFixedMods);
         }
 
         /// <summary>
@@ -162,62 +185,25 @@ namespace Test
         /// <param name="psm"></param>
         /// <param name="dataFile"></param>
         /// <returns></returns>
-        private static List<Modification[]> GetCombinationsThatFitDelta(IOrderedEnumerable<KeyValuePair<double, Modification[]>> possibleMods,
-            IEnumerable<PeptideWithSetModifications> peptide, FilteredPsmTSV psm, MsDataFile dataFile)
+        private List<Modification[]> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(40);
+            var tolerance = new PpmTolerance(15);
 
-            var deltaMass = GetDeltaMass(psm, peptide.First());
-
-            var massArray = possibleMods.Select(x => x.Key).ToArray();
-
-            var modsArray = possibleMods.Select(x => x.Value);
-
-            var mods = from mod in modsArray
-                       from mod1 in mod
-                       from mod2 in mod
-                           //from mod3 in mod
-                       where psm.BaseSeq.Contains(mod1.Target.ToString()) && psm.BaseSeq.Contains(mod2.Target.ToString())// && psm.BaseSeq.Contains(mod3.Target.ToString())
-                       select mod;
+            //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 
             var temp1 = tolerance.GetMaximumValue(deltaMass);
             var temp2 = tolerance.GetMinimumValue(deltaMass);
 
-            var maxIndex = ~Array.BinarySearch(massArray, tolerance.GetMaximumValue(deltaMass));
-            var minIndex = ~Array.BinarySearch(massArray, tolerance.GetMinimumValue(deltaMass));
+            var maxIndex = ~Array.BinarySearch(MassArray, tolerance.GetMaximumValue(deltaMass));
+            var minIndex = ~Array.BinarySearch(MassArray, tolerance.GetMinimumValue(deltaMass));
 
             int[] rangeIndex = Enumerable.Range(minIndex, Math.Abs(maxIndex - minIndex)).ToArray();
 
             if (rangeIndex.Length == 0)
-                rangeIndex = new []{maxIndex};
-            var rangeOfPossibleMods = rangeIndex.Select(x => possibleMods.ToList()[x].Value).ToList();
+                rangeIndex = new[] { maxIndex };
+            var rangeOfPossibleMods = rangeIndex.Select(x => CombinationsFromDatabase[x].Value).ToList();
 
             return rangeOfPossibleMods;
-        }
-        private static List<Modification[]> GetModificationsWithinDelta(
-            IEnumerable<PeptideWithSetModifications> peptide, FilteredPsmTSV psm, MsDataFile dataFile, int numberOfVariableMods)
-        {
-            var tolerance = new PpmTolerance(40);
-
-
-            var deltaMass = GetDeltaMass(psm, peptide.First());
-
-            var commonModsFromToml = GetModsFromGptmdThing().ToList();
-            var mods =
-                Loaders.LoadUnimod(
-                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
-                    .ToList();
-
-            commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
-
-            var groupedModsByOriginalId = (from one in commonModsFromToml
-                                           group one by one.OriginalId
-                into newGroup
-                                           select newGroup).ToList();
-
-            List<Modification[]> listOfMods = new();
-
-            return new List<Modification[]>();
         }
 
         /// <summary>
@@ -244,36 +230,6 @@ namespace Test
             return filteredList;
         }
 
-        /// <summary>
-        /// Returns the the peptide without any mods from the given psm. Used for theoretical no mods mass.
-        /// </summary>
-        /// <param name="psm"></param>
-        /// <returns></returns>
-        private static IEnumerable<PeptideWithSetModifications> GetPeptideWithNoMods(FilteredPsmTSV psm)
-        {
-            var peptideWithoutMods = new Protein(psm.BaseSeq, psm.ProteinAccession)
-                .Digest(new DigestionParams("top-down"), new List<Modification>(), new List<Modification>());
-
-            return peptideWithoutMods;
-        }
-
-        /// <summary>
-        /// Returns the peptide from given psm with fixed modifications.
-        /// </summary>
-        /// <param name="digestedProtein"></param>
-        /// <param name="psm"></param>
-        /// <returns></returns>
-        private static PeptideWithSetModifications GetPeptideWithFixedMods(IEnumerable<PeptideWithSetModifications> digestedProtein, FilteredPsmTSV psm)
-        {
-            var unmodifiedPeptide = new PeptideWithSetModifications(digestedProtein.First().Protein,
-                new DigestionParams(), 1, digestedProtein.First().BaseSequence.Length,
-                CleavageSpecificity.Full, "",
-                0, digestedProtein.First().AllModsOneIsNterminus,
-                digestedProtein.First().NumFixedMods);
-
-            return unmodifiedPeptide;
-        }
-
         private static IEnumerable<PeptideWithSetModifications> GetPeptideWithMods(FilteredPsmTSV psm, List<Modification> fixedMods = null, List<Modification> variableMods = null)
         {
             var protein = new Protein(psm.BaseSeq, psm.ProteinAccession);
@@ -296,7 +252,7 @@ namespace Test
             return peptideProteinDigest;
         }
 
-        public static IEnumerable<KeyValuePair<double, Modification[]>> GetKCombinations(
+        private static IEnumerable<KeyValuePair<double, Modification[]>> SetKCombinations(
             IEnumerable<IGrouping<string, Modification>> mods, int numberOfMods)
         {
             var combination = new List<KeyValuePair<double, Modification[]>>();
@@ -304,124 +260,102 @@ namespace Test
             switch (numberOfMods)
             {
                 case 1:
-                    var oneMod = from mod in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value, new[] { mod.First() });
-                    combination = oneMod.ToList();
-                    break;
+                    var oneMod = from mod in mods.AsParallel()
+                                 select new KeyValuePair<double, Modification[]>(
+                                     mod.First().MonoisotopicMass.Value, new[] { mod.First() });
+                    return oneMod.Distinct().OrderBy(x => x.Key);
 
                 case 2:
-                    var twoMods = from mod in mods
-                        from mod2 in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value,
-                            new[] { mod.First(), mod2.First() });
-                    combination = twoMods.ToList();
-                    break;
+                    var twoMods = from mod in mods.AsParallel()
+                                  from mod2 in mods.AsParallel()
+                                  select new KeyValuePair<double, Modification[]>(
+                                      mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value,
+                                      new[] { mod.First(), mod2.First() });
+                    return twoMods.Distinct().OrderBy(x => x.Key);
 
                 case 3:
-                    var threeMods = from mod in mods
-                        from mod2 in mods
-                        from mod3 in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value,
-                            new[] { mod.First(), mod2.First(), mod3.First() });
-                    combination = threeMods.ToList();
-                    break;
+                    var threeMods = from mod in mods.AsParallel()
+                                    from mod2 in mods.AsParallel()
+                                    from mod3 in mods.AsParallel()
+                                    select new KeyValuePair<double, Modification[]>(
+                                        mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value,
+                                        new[] { mod.First(), mod2.First(), mod3.First() });
+                    return threeMods.Distinct().OrderBy(x => x.Key); 
 
                 case 4:
-                    var fourMods = from mod in mods
-                        from mod2 in mods
-                        from mod3 in mods
-                        from mod4 in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
-                            + mod4.First().MonoisotopicMass.Value,
-                            new[] { mod.First(), mod2.First(), mod3.First(), mod4.First() });
-                    combination = fourMods.ToList();
-                    break;
+                    var fourMods = from mod in mods.AsParallel()
+                                   from mod2 in mods.AsParallel()
+                                   from mod3 in mods.AsParallel()
+                                   from mod4 in mods.AsParallel()
+                                   select new KeyValuePair<double, Modification[]>(
+                                       mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
+                                       + mod4.First().MonoisotopicMass.Value,
+                                       new[] { mod.First(), mod2.First(), mod3.First(), mod4.First() });
+                    return fourMods.Distinct().OrderBy(x => x.Key);
 
                 case 5:
-                    var fiveMods = from mod in mods
-                        from mod2 in mods
-                        from mod3 in mods
-                        from mod4 in mods
-                        from mod5 in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
-                            + mod4.First().MonoisotopicMass.Value + mod5.First().MonoisotopicMass.Value,
-                            new[] { mod.First(), mod2.First(), mod3.First(), mod4.First(), mod5.First() });
-                    combination = fiveMods.ToList();
-                    break;
+                    var fiveMods = from mod in mods.AsParallel()
+                                   from mod2 in mods.AsParallel()
+                                   from mod3 in mods.AsParallel()
+                                   from mod4 in mods.AsParallel()
+                                   from mod5 in mods.AsParallel()
+                                   select new KeyValuePair<double, Modification[]>(
+                                       mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
+                                       + mod4.First().MonoisotopicMass.Value + mod5.First().MonoisotopicMass.Value,
+                                       new[] { mod.First(), mod2.First(), mod3.First(), mod4.First(), mod5.First() });
+                    return fiveMods.Distinct().OrderBy(x => x.Key);
 
                 case 6:
-                    var sixMods = from mod in mods
-                        from mod2 in mods
-                        from mod3 in mods
-                        from mod4 in mods
-                        from mod5 in mods
-                        from mod6 in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
-                            + mod4.First().MonoisotopicMass.Value + mod5.First().MonoisotopicMass.Value + mod6.First().MonoisotopicMass.Value,
-                            new[] { mod.First(), mod2.First(), mod3.First(), mod4.First(), mod5.First(), mod6.First() });
-                    combination = sixMods.ToList();
-                    break;
+                    var sixMods = from mod in mods.AsParallel()
+                                  from mod2 in mods.AsParallel()
+                                  from mod3 in mods.AsParallel()
+                                  from mod4 in mods.AsParallel()
+                                  from mod5 in mods.AsParallel()
+                                  from mod6 in mods.AsParallel()
+                                  select new KeyValuePair<double, Modification[]>(
+                                      mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
+                                      + mod4.First().MonoisotopicMass.Value + mod5.First().MonoisotopicMass.Value + mod6.First().MonoisotopicMass.Value,
+                                      new[] { mod.First(), mod2.First(), mod3.First(), mod4.First(), mod5.First(), mod6.First() });
+                    return sixMods.Distinct().OrderBy(x => x.Key);
 
                 case 7:
-                    var sevenMods = from mod in mods
-                        from mod2 in mods
-                        from mod3 in mods
-                        from mod4 in mods
-                        from mod5 in mods
-                        from mod6 in mods
-                        from mod7 in mods
-                        select new KeyValuePair<double, Modification[]>(
-                            mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
-                            + mod4.First().MonoisotopicMass.Value + mod5.First().MonoisotopicMass.Value + mod6.First().MonoisotopicMass.Value
-                            + mod7.First().MonoisotopicMass.Value,
-                            new[] { mod.First(), mod2.First(), mod3.First(), mod4.First(), mod5.First(), mod6.First(), mod7.First() });
-                    combination = sevenMods.ToList();
-                    break;
+                    var sevenMods = from mod in mods.AsParallel()
+                                    from mod2 in mods.AsParallel()
+                                    from mod3 in mods.AsParallel()
+                                    from mod4 in mods.AsParallel()
+                                    from mod5 in mods.AsParallel()
+                                    from mod6 in mods.AsParallel()
+                                    from mod7 in mods.AsParallel()
+                                    select new KeyValuePair<double, Modification[]>(
+                                        mod.First().MonoisotopicMass.Value + mod2.First().MonoisotopicMass.Value + mod3.First().MonoisotopicMass.Value
+                                        + mod4.First().MonoisotopicMass.Value + mod5.First().MonoisotopicMass.Value + mod6.First().MonoisotopicMass.Value
+                                        + mod7.First().MonoisotopicMass.Value,
+                                        new[] { mod.First(), mod2.First(), mod3.First(), mod4.First(), mod5.First(), mod6.First(), mod7.First() });
+                    return sevenMods.Distinct().OrderBy(x => x.Key);
             }
-
-            return combination.AsEnumerable();
+            
+            return combination.OrderBy(x => x.Key);
         }
-        /// <summary>
-        /// Returns all combinations of mods in the database. Currently hard-coded to three mods.
-        /// </summary>
-        /// <returns></returns>
-        public static IOrderedEnumerable<KeyValuePair<double, Modification[]>> GetPossibleModCombinations(FilteredPsmTSV psm,
-                IEnumerable<PeptideWithSetModifications> peptide, int numberOfVariableMods)
+
+        private static IOrderedEnumerable<IGrouping<string, Modification>> SetModsGroup(List<Modification> listOfMods)
         {
-            //var tolerance = new PpmTolerance(40);
-
-            //var deltaMass = GetDeltaMass(psm, dataFile, peptide.First());
-
-            var commonModsFromToml = GetModsFromGptmdThing()
-                .Where(mod => mod.Target.ToString().Contains('X') ||
-                              peptide.First().BaseSequence.Contains(mod.Target.ToString())).ToList();
+            var commonModsFromToml = GetModsFromGptmdThing().ToList();
 
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             commonModsFromToml.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); //adds this mod into the toml database (it's a fixed mod)
 
-            var deltaMass = GetDeltaMass(psm, peptide.First());
-
-            var modsGroupedByOriginalId = commonModsFromToml.GroupBy(modId => modId.IdWithMotif);
-
-            return GetKCombinations(modsGroupedByOriginalId, 3).OrderBy(x => x.Key);
+            return commonModsFromToml.GroupBy(modId => modId.IdWithMotif).OrderBy(x => x.Key);
         }
-
         /// <summary>
         /// Returns mods from a toml containing common modifications. 
         /// </summary>
         /// <param name="gptmdToml"></param>
         /// <returns></returns>
-        private static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
+        public static IEnumerable<Modification> GetModsFromGptmdThing(string gptmdToml = @"Task1-GPTMDTaskconfig.toml")
         {
             var task = Toml.ReadFile<GptmdTask>(gptmdToml,
                 MetaMorpheusTask.tomlConfig);
