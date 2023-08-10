@@ -9,6 +9,7 @@ using Proteomics.ProteolyticDigestion;
 using Readers;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -183,6 +184,51 @@ namespace Test
             var options = new JsonSerializerOptions { WriteIndented = true };
             string jsonString = JsonSerializer.Serialize(peptideGroups.Select(x => x), options);
             File.WriteAllText(@"C:\Users\Edwin\Desktop\jsonExample", jsonString);
+
+
+            List<DataTable> proteinGroupsTables = new();
+
+            Parallel.ForEach(results, result =>
+            {
+                var table = new DataTable();
+                foreach (var feature in typeof(MultiModSearchResults).GetProperties())
+                {
+                    table.Columns.Add(new DataColumn(feature.Name));
+                }
+                foreach (var peptide in result)
+                {
+                    var individualPeptide = new MultiModSearchResults()
+                    {
+                        AccessionNumber = peptide.Key.Protein.Accession,
+                        BaseSequece = peptide.Key.Protein.BaseSequence,
+                        IsDecoy = peptide.Key.Protein.IsDecoy,
+                        MassErrorDa = peptide.Value.Select(x => x.MassErrorDa).ToArray(),
+                        MassErrorPpm = peptide.Value.Select(x => x.MassErrorPpm).ToArray(),
+                        MatchedIonCharge = peptide.Value.Select(x => x.Charge).ToArray(),
+                        MatchedIons = peptide.Value.Select(x => x.Annotation).ToArray(),
+                        MatchedMz = peptide.Value.Select(x => x.Mz).ToArray(),
+                        TheoricalMz = peptide.Value.Select(x => x.NeutralTheoreticalProduct.NeutralMass).ToArray(),
+                        MonoisotopicMass = peptide.Key.MonoisotopicMass,
+                        MostAbundantMonoisotopicMass = peptide.Key.MostAbundantMonoisotopicMass,
+                        PeptideLength = peptide.Key.Protein.Length
+                    };
+                    DataRow row = table.NewRow();
+                    row[1] = individualPeptide.BaseSequece;
+                    row[2] = individualPeptide.AccessionNumber;
+                    row[3] = individualPeptide.PeptideLength;
+                    row[3] = individualPeptide.MonoisotopicMass;
+                    row[4] = individualPeptide.MostAbundantMonoisotopicMass;
+                    row[5] = individualPeptide.IsDecoy;
+                    row[6] = String.Join(", ", individualPeptide.MatchedIons);
+                    row[7] = String.Join(", ", individualPeptide.MatchedIonCharge);
+                    row[8] = String.Join(", ", individualPeptide.TheoricalMz);
+                    row[9] = String.Join(", ", individualPeptide.MatchedMz);
+                    row[10] = String.Join(", ", individualPeptide.MassErrorPpm);
+                    row[11] = String.Join(", ", individualPeptide.MassErrorDa);
+                }
+                proteinGroupsTables.Add(table);
+            });
+
 
         }
         /// <summary>

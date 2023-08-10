@@ -1951,6 +1951,13 @@ namespace MetaMorpheusGUI
             OpenFolder(Path.Combine(GlobalVariables.DataDir, @"Proteomes"));
         }
 
-       
+
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        {
+            throw new NotImplementedException();
+        }
+
+        //Edwin Viz
+        
     }
 }

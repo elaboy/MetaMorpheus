@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="mzLib" Version="5.0.539.7172023" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TaskLayer\TaskLayer.csproj" />
+    <ProjectReference Include="..\Test\Test.csproj" />
+  </ItemGroup>
+
+</Project>
