@@ -10,31 +10,36 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        
+
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width ="300"/>
+            <ColumnDefinition Width="300"/>
         </Grid.ColumnDefinitions>
-
-        <!--<Label>Settings</Label>-->
 
         <StackPanel>
             <Label>Psm Path</Label>
-            <TextBox x:Name="psmPath" Width="Auto"/>
+            <TextBox x:Name="psmPath" Text="D:\08-30-22_bottomup\example.psmtsv" Width="Auto"/>
             <Button Height="15"></Button>
-            
+
             <Label>MzML File Path</Label>
-            <TextBox x:Name="mzMLPath" Width="Auto"/>
+            <TextBox x:Name="mzMLPath" Text="D:\08-30-22_bottomup\test.mzML" Width="Auto"/>
             <Button Height="15"></Button>
-            
+
             <Label>Maximum number of Combinations</Label>
-            <TextBox x:Name="maxNumOfMods" Width="Auto"/>
+            <TextBox x:Name="maxNumOfMods" Text="3" Width="Auto"/>
             <Button Height="15"></Button>
-            
+
             <Button Margin="15" Height="30" Content="Run" Click="RunButton"></Button>
 
             <ListBox Name="proteinGroups" ItemsSource="{Binding}" Height="180" Width="auto" ></ListBox>
         </StackPanel>
-        
-        
+
+        <StackPanel Grid.Column="2">
+            <DataGrid x:Name="dataGrid" Width="400" Height="400">
+
+            </DataGrid>
+
+        </StackPanel>
+
     </Grid>
 </Window>

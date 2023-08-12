@@ -22,7 +22,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test", "Test\Test.csproj", 
 EndProject
 Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "Bootstrapper", "Bootstrapper\Bootstrapper.wixproj", "{E0EA5AC4-24A9-43DC-8FBC-CCEB3B9935B6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiModSearchViz", "MultiModSearchViz\MultiModSearchViz.csproj", "{06CC65EE-B513-45ED-8164-9DCD33B30D2B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MultiModSearchViz", "MultiModSearchViz\MultiModSearchViz.csproj", "{06CC65EE-B513-45ED-8164-9DCD33B30D2B}"
 	ProjectSection(ProjectDependencies) = postProject
 		{FFAE3A5E-B5AE-4CD0-ABF9-703C91F1C7D6} = {FFAE3A5E-B5AE-4CD0-ABF9-703C91F1C7D6}
 	EndProjectSection

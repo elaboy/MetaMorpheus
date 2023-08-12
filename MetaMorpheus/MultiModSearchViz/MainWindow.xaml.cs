@@ -1,29 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using EngineLayer;
+﻿using EngineLayer;
 using MassSpectrometry;
 using Microsoft.Win32;
 using Proteomics;
 using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using Readers;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
 using TaskLayer;
-using Test;
+using TorchSharp;
 using UsefulProteomicsDatabases;
-using static Test.TestModComboSearch;
 
 namespace MultiModSearchViz
 {
@@ -43,7 +33,7 @@ namespace MultiModSearchViz
             psmFile.ShowDialog();
             psmFile.FileName = @"Asdad";
 
-            var psmList = MultiModSearch.ReadFilteredPsmTSVShort(psmFile.FileName);
+            //var psmList = MultiModSearch.ReadFilteredPsmTSVShort(psmFile.FileName);
 
         }
 
@@ -53,15 +43,20 @@ namespace MultiModSearchViz
             dataFilePath.ShowDialog();
             dataFilePath.FileName = @"asdada";
 
-            var dataFile =MsDataFileReader.GetDataFile(dataFilePath.FileName).GetAllScansList()
+            var dataFile = MsDataFileReader.GetDataFile(dataFilePath.FileName).GetAllScansList()
                 .Where(x => x.MsnOrder == 2).ToArray();
         }
 
         private void RunButton(object sender, RoutedEventArgs e)
         {
-            List<FilteredPsmTSV> psmList = MultiModSearch.ReadFilteredPsmTSVShort($@"{psmPath.Text}");
+            
+            List<FilteredPsmTSV> psmList = MultipleSearchEngine.ReadFilteredPsmTSVShort($@"{psmPath.Text}");
 
             MsDataFile dataFile = MsDataFileReader.GetDataFile($@"{mzMLPath.Text}");
+
+            GlobalVariables.SetUpGlobalVariables();
+
+            int maxNumOfMods = int.Parse(this.maxNumOfMods.Text);
 
             List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
                 .Where(mod => mod.ModificationType.Contains("Common Biological")).ToList();
@@ -74,68 +69,12 @@ namespace MultiModSearchViz
             List<Modification> fixedMods = new List<Modification>();
             fixedMods.Add(modsFromUnimod.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
 
-            MultipleSearchEngine engine = new MultipleSearchEngine(commonBiologycalMods, int.Parse(maxNumOfMods.Text), true);
+            var engine = new MultipleSearchEngine(commonBiologycalMods, maxNumOfMods, true);
 
-            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> tempMatches = new();
+            var run = MultipleSearchEngine.Run(engine, psmList, fixedMods, dataFile, maxNumOfMods);
 
-
-            Parallel.ForEach(psmList, psm =>
-            {
-                IEnumerable<PeptideWithSetModifications> peptideAsProtein = MultipleSearchEngine.GetPeptideAsProtein(psm, fixedMods);
-                List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> matches = 
-                    engine.GetPeptideFragmentIonsMatches(psm, dataFile, fixedMods);
-
-                tempMatches.AddRange(matches);
-            });
-
-            var results = tempMatches.OrderByDescending(x => x.Value.Count)
-                .GroupBy(x => x.Key.BaseSequence);
-
-
-            List<DataTable> proteinGroupsTables = new();
-
-            Parallel.ForEach(results, result =>
-            {
-                var table = new DataTable();
-                foreach (var feature in typeof(MultiModSearchResults).GetProperties())
-                {
-                    table.Columns.Add(new DataColumn(feature.Name));
-                }
-                foreach (var peptide in result)
-                {
-                    var individualPeptide = new MultiModSearchResults()
-                    {
-                        AccessionNumber = peptide.Key.Protein.Accession,
-                        BaseSequece = peptide.Key.Protein.BaseSequence,
-                        IsDecoy = peptide.Key.Protein.IsDecoy,
-                        MassErrorDa = peptide.Value.Select(x => x.MassErrorDa).ToArray(),
-                        MassErrorPpm = peptide.Value.Select(x => x.MassErrorPpm).ToArray(),
-                        MatchedIonCharge = peptide.Value.Select(x => x.Charge).ToArray(),
-                        MatchedIons = peptide.Value.Select(x => x.Annotation).ToArray(),
-                        MatchedMz = peptide.Value.Select(x => x.Mz).ToArray(),
-                        TheoricalMz = peptide.Value.Select(x => x.NeutralTheoreticalProduct.NeutralMass).ToArray(),
-                        MonoisotopicMass = peptide.Key.MonoisotopicMass,
-                        MostAbundantMonoisotopicMass = peptide.Key.MostAbundantMonoisotopicMass,
-                        PeptideLength = peptide.Key.Protein.Length
-                    };
-                    DataRow row = table.NewRow();
-                    row[1] = individualPeptide.BaseSequece;
-                    row[2] = individualPeptide.AccessionNumber;
-                    row[3] = individualPeptide.PeptideLength;
-                    row[3] = individualPeptide.MonoisotopicMass;
-                    row[4] = individualPeptide.MostAbundantMonoisotopicMass;
-                    row[5] = individualPeptide.IsDecoy;
-                    row[6] = String.Join(", ", individualPeptide.MatchedIons);
-                    row[7] = String.Join(", ", individualPeptide.MatchedIonCharge);
-                    row[8] = String.Join(", ", individualPeptide.TheoricalMz);
-                    row[9] = String.Join(", ", individualPeptide.MatchedMz);
-                    row[10] = String.Join(", ", individualPeptide.MassErrorPpm);
-                    row[11] = String.Join(", ", individualPeptide.MassErrorDa);
-                }
-                proteinGroupsTables.Add(table);
-            });
-
-            proteinGroups.ItemsSource = proteinGroupsTables.AsEnumerable();
+            proteinGroups.ItemsSource = run.Select(x => x.TableName).ToList();
+            dataGrid.ItemsSource = run.Select(x => x.Rows[0]);
         }
     }
 }
