@@ -1,15 +1,13 @@
 ﻿using EngineLayer;
 using MassSpectrometry;
 using Microsoft.Win32;
+using Newtonsoft.Json;
 using Proteomics;
-using Proteomics.Fragmentation;
-using Proteomics.ProteolyticDigestion;
 using Readers;
-using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows;
 using TaskLayer;
 using TorchSharp;
@@ -22,6 +20,8 @@ namespace MultiModSearchViz
     /// </summary>
     public partial class MainWindow : Window
     {
+
+        public List<DataTable> RunResults { get; set; }
         public MainWindow()
         {
             InitializeComponent();
@@ -49,7 +49,7 @@ namespace MultiModSearchViz
 
         private void RunButton(object sender, RoutedEventArgs e)
         {
-            
+
             List<FilteredPsmTSV> psmList = MultipleSearchEngine.ReadFilteredPsmTSVShort($@"{psmPath.Text}");
 
             MsDataFile dataFile = MsDataFileReader.GetDataFile($@"{mzMLPath.Text}");
@@ -61,20 +61,45 @@ namespace MultiModSearchViz
             List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
                 .Where(mod => mod.ModificationType.Contains("Common Biological")).ToList();
 
+
+
             List<Modification> modsFromUnimod =
-                Loaders.LoadUnimod(
-                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
-                    .ToList();
+                Loaders.LoadUnimod(@"../../../../EngineLayer/unimod.xml").ToList();
+            //Loaders.LoadUnimod(
+            //        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+            //    .ToList();
 
             List<Modification> fixedMods = new List<Modification>();
             fixedMods.Add(modsFromUnimod.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
 
             var engine = new MultipleSearchEngine(commonBiologycalMods, maxNumOfMods, true);
 
-            var run = MultipleSearchEngine.Run(engine, psmList, fixedMods, dataFile, maxNumOfMods);
+            var (tables, objects) = MultipleSearchEngine.Run(engine, psmList,
+                fixedMods, dataFile, maxNumOfMods, pathToSave.Text);
 
-            proteinGroups.ItemsSource = run.Select(x => x.TableName).ToList();
-            dataGrid.ItemsSource = run.Select(x => x.Rows[0]);
+            //dataGrid.ItemsSource = tables.Find(x => x.TableName.Equals(proteinGroups.SelectedItems)).Rows;
+            //proteinGroups.ItemsSource = run.Select(x => x.TableName).ToList();
+            //dataGrid.DataContext = run;
+            //RunResults = tables;
+        }
+
+        private void VizResults(object sender, RoutedEventArgs e)
+        {
+            string jsonString = File.ReadAllText(pathToResults.Text);
+            List<MultipleSearchResults> resultsFile = System.Text.Json.JsonSerializer.Deserialize<List<MultipleSearchResults>>(jsonString);
+            resultsFile.RemoveAll(x => x == null);
+            var groupedPeptides = resultsFile.GroupBy(x => x.BaseSequence).ToList();
+            RunResults = MultipleSearchResults.GetDataTables(groupedPeptides);
+            proteinGroups.ItemsSource = groupedPeptides.Select(x => x.Key).ToList();
+        }
+
+        private void UpdatePeptideGroup(object sender, RoutedEventArgs e)
+        {
+
+            var peptideGroup = proteinGroups.SelectedItem.ToString();
+
+            var dataView = RunResults.Find(x => x.TableName.Equals(peptideGroup)).AsDataView();
+            dataGrid.ItemsSource = dataView;
         }
     }
 }

@@ -10,11 +10,17 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using EngineLayer;
 using UsefulProteomicsDatabases;
 using FlashLFQ;
+using System.Text.Json;
+using TorchSharp;
+using static Nett.TomlObjectFactory;
+using static TorchSharp.torch.utils;
+using System.Drawing.Imaging;
 
 namespace TaskLayer
 {
@@ -36,8 +42,8 @@ namespace TaskLayer
             MassArray = CombinationsWithAddedMass.Select(x => x.Key).ToArray();
         }
 
-        public static List<DataTable> Run(MultipleSearchEngine engine,List<FilteredPsmTSV> psmList, List<Modification> fixedMods,
-            MsDataFile dataFile, int maxNumOfMods)
+        public static (List<DataTable>, List<MultipleSearchResults>) Run(MultipleSearchEngine engine,List<FilteredPsmTSV> psmList, List<Modification> fixedMods,
+            MsDataFile dataFile, int maxNumOfMods, string pathToSaveResults)
         {
 
 
@@ -58,7 +64,7 @@ namespace TaskLayer
 
 
             List<DataTable> proteinGroupsTables = new();
-
+            List<MultipleSearchResults> searchResults = new();
             Parallel.ForEach(results, result =>
             {
                 var table = new DataTable();
@@ -72,7 +78,11 @@ namespace TaskLayer
                     var individualPeptide = new MultipleSearchResults()
                     {
                         AccessionNumber = peptide.Key.Protein.Accession,
-                        BaseSequece = peptide.Key.Protein.BaseSequence,
+                        BaseSequence = peptide.Key.Protein.BaseSequence,
+                        FullSequence = peptide.Key.FullSequence,
+                        IonMatchedCount = peptide.Value.Count,
+                        Modifications = String.Join(", ", peptide.Key.AllModsOneIsNterminus.Select(x => $"{x.Value.IdWithMotif}").ToArray()),
+                        SequenceCoverage = peptide.Value.Count > 0 ? (peptide.Key.Length*2)/peptide.Value.Count : 0,
                         IsDecoy = peptide.Key.Protein.IsDecoy,
                         MassErrorDa = peptide.Value.Select(x => x.MassErrorDa).ToArray(),
                         MassErrorPpm = peptide.Value.Select(x => x.MassErrorPpm).ToArray(),
@@ -85,24 +95,35 @@ namespace TaskLayer
                         PeptideLength = peptide.Key.Protein.Length
                     };
                     DataRow row = table.NewRow();
-                    row[1] = individualPeptide.BaseSequece;
-                    row[2] = individualPeptide.AccessionNumber;
-                    row[3] = individualPeptide.PeptideLength;
-                    row[3] = individualPeptide.MonoisotopicMass;
-                    row[4] = individualPeptide.MostAbundantMonoisotopicMass;
-                    row[5] = individualPeptide.IsDecoy;
-                    row[6] = String.Join(", ", individualPeptide.MatchedIons);
-                    row[7] = String.Join(", ", individualPeptide.MatchedIonCharge);
-                    row[8] = String.Join(", ", individualPeptide.TheoricalMz);
-                    row[9] = String.Join(", ", individualPeptide.MatchedMz);
-                    row[10] = String.Join(", ", individualPeptide.MassErrorPpm);
-                    row[11] = String.Join(", ", individualPeptide.MassErrorDa);
+                    row[0] = individualPeptide.BaseSequence;
+                    row[1] = individualPeptide.SequenceCoverage;
+                    row[2] = individualPeptide.IonMatchedCount;
+                    row[3] = individualPeptide.Modifications;
+                    row[4] = individualPeptide.FullSequence;
+                    row[5] = individualPeptide.AccessionNumber;
+                    row[6] = individualPeptide.PeptideLength;
+                    row[7] = individualPeptide.MonoisotopicMass;
+                    row[8] = individualPeptide.MostAbundantMonoisotopicMass;
+                    row[9] = individualPeptide.IsDecoy;
+                    row[10] = String.Join(", ", individualPeptide.MatchedIons);
+                    row[11] = String.Join(", ", individualPeptide.MatchedIonCharge);
+                    row[12] = String.Join(", ", individualPeptide.TheoricalMz);
+                    row[13] = String.Join(", ", individualPeptide.MatchedMz);
+                    row[14] = String.Join(", ", individualPeptide.MassErrorPpm);
+                    row[15] = String.Join(", ", individualPeptide.MassErrorDa);
 
                     table.Rows.Add(row);
+                    searchResults.Add(individualPeptide);
+
                 }
                 proteinGroupsTables.Add(table);
             });
-            return proteinGroupsTables;
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            string jsonString = JsonSerializer.Serialize(searchResults.Select(x => x), options);
+            File.WriteAllText($@"{pathToSaveResults}", jsonString);
+
+            return (proteinGroupsTables, searchResults);
             //proteinGroups.ItemsSource = proteinGroupsTables.AsEnumerable();
         }
 
@@ -116,9 +137,12 @@ namespace TaskLayer
             return combinationsFromDatabase.Distinct().OrderBy(x => x.Key).ToArray();
         }
 
-        public List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> GetPeptideFragmentIonsMatches(FilteredPsmTSV psm, MsDataFile dataFile, List<Modification> fixedMods)
+        public List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> GetPeptideFragmentIonsMatches(FilteredPsmTSV psm, MsDataFile dataFile,
+            List<Modification> fixedMods, int cycles=4)
         {
+
             List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> results = new();
+
 
             var spectrum = dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber));
             //var neutralMass = spectrum.SelectedIonMZ.Value.ToMass(spectrum.SelectedIonChargeStateGuess.Value);
@@ -126,31 +150,63 @@ namespace TaskLayer
             var peptide = GetPeptideWithMods(psm, fixedMods);
 
             var deltaMass = GetDeltaMass(psm, peptide.First());
+            results.Add(RecursiveSearch(psm, peptide, spectrum, fixedMods, dataFile, deltaMass));
 
-            if (deltaMass < 1)
-                return results;
-
-            var probableMods =
-                GetCombinationsThatFitDelta(deltaMass);
-
-            //var products = new List<Product>();
-            int id = 0;
-            foreach (var mod in probableMods)
+            for(int i = 0; i < cycles; i++)
             {
+                results.Add(RecursiveSearch(psm, results.Select(x => x.Key),
+                    spectrum, fixedMods, dataFile, deltaMass));
+            }
+
+            return results;
+        }
+
+        private List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> RecursiveSearch(FilteredPsmTSV psm,
+            IEnumerable<PeptideWithSetModifications> peptide,
+            MsDataScan spectrum, List<Modification> fixedMods, MsDataFile dataFile, double deltaMass)
+        {
+            List<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> results = new();
+
+            foreach (var item in peptide)
+            {
+                deltaMass = GetDeltaMass(psm, item);
+                var probableMods =
+                    GetCombinationsThatFitDelta(deltaMass);
+
                 var products = new List<Product>();
-                var ptm = GetPeptideWithMods(psm, fixedMods, mod.ToList());
-                foreach (var variant in ptm)
+                int id = 0;
+                foreach (var mod in probableMods)
                 {
-                    variant.Fragment(spectrum.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both,
-                        products);
+                    var ptm = item.Protein.Digest(new DigestionParams("top-down"), fixedMods, mod);
+                    //var ptm = GetPeptideWithMods(psm, fixedMods, mod.ToList());
+                    foreach (var variant in ptm)
+                    {
+                        variant.Fragment(spectrum.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both,
+                            products);
 
-                    var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(spectrum,
-                        double.Parse(psm.PrecursorMass),
-                        spectrum.SelectedIonChargeStateGuess.Value, dataFile.FilePath,
-                        new CommonParameters()), products, new CommonParameters());
+                        var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(spectrum,
+                            double.Parse(psm.PrecursorMass),
+                            spectrum.SelectedIonChargeStateGuess.Value, dataFile.FilePath,
+                            new CommonParameters()), products, new CommonParameters());
 
-                    results.Add(new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(variant, match));
-                    id = id + 1;
+                        if (results.Count == 0)
+                        {
+                            results.Add(new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(variant, match));
+                            id = id + 1;
+                        }
+                        else
+                        {
+                            if (results
+                                    .OrderBy(x => x.Value.Count)
+                                    .First().Value.Count < match.Count)
+                            {
+                                results.Add(new KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>(variant, match));
+                                id = id + 1;
+                            }
+                        }
+
+
+                    }
                 }
             }
             return results;

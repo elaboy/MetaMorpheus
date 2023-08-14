@@ -678,7 +678,7 @@ namespace TaskLayer
         {
             IEnumerable<PsmFromTsv> filteredPsms =
                 from psm in psms
-                where psm.QValue <= 0.00001 && psm.PEP <= 0.00001 && psm.DecoyContamTarget.Equals("T") &&
+                where /*psm.QValue <= 0.00001 && psm.PEP <= 0.00001 && */psm.DecoyContamTarget.Equals("T") &&
                       PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
                 //where psm.QValue <= 0.001 && psm.PEP <= 0.001 && psm.DecoyContamTarget.Equals("T") &&
                 //      PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2

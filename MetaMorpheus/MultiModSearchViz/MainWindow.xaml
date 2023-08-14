@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MultiModSearchViz"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow" Height="600" Width="1200" SizeToContent="WidthAndHeight">
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -13,7 +13,7 @@
 
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width ="300"/>
-            <ColumnDefinition Width="300"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <StackPanel>
@@ -29,13 +29,23 @@
             <TextBox x:Name="maxNumOfMods" Text="3" Width="Auto"/>
             <Button Height="15"></Button>
 
-            <Button Margin="15" Height="30" Content="Run" Click="RunButton"></Button>
+            <Label>Path to save results</Label>
+            <TextBox x:Name="pathToSave" Text="" Width="Auto"/>
+            <Button Height="15"></Button>
 
-            <ListBox Name="proteinGroups" ItemsSource="{Binding}" Height="180" Width="auto" ></ListBox>
+            <Label>Results to visualize</Label>
+            <TextBox x:Name="pathToResults" Text="" Width="Auto"/>
+            <Button Height="15"></Button>
+
+            <Button Margin="15" Height="30" Content="Run" Click="RunButton"></Button>
+            <Button Margin="15" Height="30" Content="Viz" Click="VizResults"></Button>
+            <Button Margin="15" Height="30" Content="View Peptide Group" Click="UpdatePeptideGroup"></Button>
+
+    <ListBox Name="proteinGroups" ItemsSource="{Binding }" Height="200" Width="auto"></ListBox>
         </StackPanel>
 
-        <StackPanel Grid.Column="2">
-            <DataGrid x:Name="dataGrid" Width="400" Height="400">
+        <StackPanel Grid.Column="2" Width="Auto">
+            <DataGrid x:Name="dataGrid" Width="Auto" Height="500" SelectedItem="UpdateDataGrid"  ItemsSource="{Binding }" IsSynchronizedWithCurrentItem="True">
 
             </DataGrid>
 
