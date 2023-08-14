@@ -41,7 +41,8 @@
             <Button Margin="15" Height="30" Content="Viz" Click="VizResults"></Button>
             <Button Margin="15" Height="30" Content="View Peptide Group" Click="UpdatePeptideGroup"></Button>
 
-    <ListBox Name="proteinGroups" ItemsSource="{Binding }" Height="200" Width="auto"></ListBox>
+            
+            <ListBox Name="proteinGroups" ItemsSource="{Binding }" Height="600" Width="auto"></ListBox>
         </StackPanel>
 
         <StackPanel Grid.Column="2" Width="Auto">

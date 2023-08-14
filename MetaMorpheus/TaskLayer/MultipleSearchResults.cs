@@ -11,6 +11,7 @@ namespace TaskLayer
     public class MultipleSearchResults
     {
         public string BaseSequence { get; set; }
+        public double MMmatch { get; set; }
         public double SequenceCoverage { get; set; }
         public int IonMatchedCount { get; set; }
         public string Modifications { get; set; }
@@ -43,20 +44,21 @@ namespace TaskLayer
                     DataRow row = table.NewRow();
                     row[0] = peptide.BaseSequence;
                     row[1] = peptide.SequenceCoverage;
-                    row[2] = peptide.IonMatchedCount;
-                    row[3] = peptide.Modifications;
-                    row[4] = peptide.FullSequence;
-                    row[5] = peptide.AccessionNumber;
-                    row[6] = peptide.PeptideLength;
-                    row[7] = peptide.MonoisotopicMass;
-                    row[8] = peptide.MostAbundantMonoisotopicMass;
-                    row[9] = peptide.IsDecoy;
-                    row[10] = String.Join(", ", peptide.MatchedIons);
-                    row[11] = String.Join(", ", peptide.MatchedIonCharge);
-                    row[12] = String.Join(", ", peptide.TheoricalMz);
-                    row[13] = String.Join(", ", peptide.MatchedMz);
-                    row[14] = String.Join(", ", peptide.MassErrorPpm);
-                    row[15] = String.Join(", ", peptide.MassErrorDa);
+                    row[2] = peptide.MMmatch;
+                    row[3] = peptide.IonMatchedCount;
+                    row[4] = peptide.Modifications;
+                    row[5] = peptide.FullSequence;
+                    row[6] = peptide.AccessionNumber;
+                    row[7] = peptide.PeptideLength;
+                    row[8] = peptide.MonoisotopicMass;
+                    row[9] = peptide.MostAbundantMonoisotopicMass;
+                    row[10] = peptide.IsDecoy;
+                    row[11] = String.Join(", ", peptide.MatchedIons);
+                    row[12] = String.Join(", ", peptide.MatchedIonCharge);
+                    row[13] = String.Join(", ", peptide.TheoricalMz);
+                    row[14] = String.Join(", ", peptide.MatchedMz);
+                    row[15] = String.Join(", ", peptide.MassErrorPpm);
+                    row[16] = String.Join(", ", peptide.MassErrorDa);
 
                     table.Rows.Add(row);
 

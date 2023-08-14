@@ -72,10 +72,11 @@ namespace MultiModSearchViz
             List<Modification> fixedMods = new List<Modification>();
             fixedMods.Add(modsFromUnimod.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
 
-            var engine = new MultipleSearchEngine(commonBiologycalMods, maxNumOfMods, true);
+            new MultipleSearchEngine(psmList, commonBiologycalMods, maxNumOfMods,
+                fixedMods, dataFile, true).Run(pathToSave.Text, fixedMods, dataFile);
 
-            var (tables, objects) = MultipleSearchEngine.Run(engine, psmList,
-                fixedMods, dataFile, maxNumOfMods, pathToSave.Text);
+            //var (tables, objects) = MultipleSearchEngine.Run(engine, psmList,
+            //    fixedMods, dataFile, maxNumOfMods, pathToSave.Text);
 
             //dataGrid.ItemsSource = tables.Find(x => x.TableName.Equals(proteinGroups.SelectedItems)).Rows;
             //proteinGroups.ItemsSource = run.Select(x => x.TableName).ToList();
@@ -86,10 +87,16 @@ namespace MultiModSearchViz
         private void VizResults(object sender, RoutedEventArgs e)
         {
             string jsonString = File.ReadAllText(pathToResults.Text);
-            List<MultipleSearchResults> resultsFile = System.Text.Json.JsonSerializer.Deserialize<List<MultipleSearchResults>>(jsonString);
+            
+            List<MultipleSearchResults> resultsFile = System.Text.Json.JsonSerializer
+                .Deserialize<List<MultipleSearchResults>>(jsonString);
+
             resultsFile.RemoveAll(x => x == null);
+            
             var groupedPeptides = resultsFile.GroupBy(x => x.BaseSequence).ToList();
+            
             RunResults = MultipleSearchResults.GetDataTables(groupedPeptides);
+            
             proteinGroups.ItemsSource = groupedPeptides.Select(x => x.Key).ToList();
         }
 
