@@ -18,6 +18,7 @@
         public string MatchedIonSeries;
         public string MatchedIonCounts;
         public string PrecursorMass;
+        public string Charge;
         public FilteredPsmTSV(string[] psm)
         {
             FileName = psm[0];
@@ -36,6 +37,7 @@
             MatchedIonSeries = psm[13];
             MatchedIonCounts = psm[14];
             PrecursorMass = psm[15];
+            Charge = psm[16];
         }
     }
 

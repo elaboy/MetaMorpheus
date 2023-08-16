@@ -17,6 +17,7 @@ using Proteomics.AminoAcidPolymer;
 using static Nett.TomlObjectFactory;
 using System.Drawing.Imaging;
 using ICSharpCode.SharpZipLib;
+using MathNet.Numerics;
 using TorchSharp;
 
 namespace TaskLayer
@@ -26,8 +27,8 @@ namespace TaskLayer
         public List<List<Modification>> CombinationOfModifications { get; set; }
         public List<KeyValuePair<double, Modification[]>> CombinationsWithAddedMass { get; set; }
         public double[] MassArray { get; set; }
-        public List<Tuple<double,Protein, MsDataScan, double>> ProteinListInferedFromGPTMD { get; private set; }
-        public List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double>> peptideGroup { get; private set; }
+        public List<Tuple<double,Protein, MsDataScan, double, int>> ProteinListInferedFromGPTMD { get; private set; }
+        public List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>> peptideGroup { get; private set; }
         public MultipleSearchEngine(List<FilteredPsmTSV> psmList, List<Modification> listOfMods, int numberOfVariableMods, List<Modification> fixedMods, MsDataFile dataFile,
             bool allCombos)
         {
@@ -48,9 +49,9 @@ namespace TaskLayer
             ProteinListInferedFromGPTMD = new();
             Parallel.ForEach(psmList, psm =>
             {
-                ProteinListInferedFromGPTMD.Add(new Tuple<double, Protein, MsDataScan, double>(double.Parse(psm.PrecursorMass),
+                ProteinListInferedFromGPTMD.Add(new Tuple<double, Protein, MsDataScan, double, int>(double.Parse(psm.PrecursorMass),
                     new Protein(psm.BaseSeq, psm.ProteinAccession), dataFile.GetOneBasedScan(int.Parse(psm.ScanNumber)),
-                    double.Parse(psm.Score)));
+                    double.Parse(psm.Score), int.Parse(psm.Charge)));
             });
         }
 
@@ -72,7 +73,7 @@ namespace TaskLayer
         {
             peptideGroup = new();
 
-            Parallel.ForEach(ProteinListInferedFromGPTMD, protein =>
+            foreach(var protein in ProteinListInferedFromGPTMD)
             {
                 var fixedModdedPeptide = protein.Item2.Digest(new DigestionParams("top-down", 0),
                     fixedMods, new List<Modification>());
@@ -95,15 +96,16 @@ namespace TaskLayer
                             FragmentationTerminus.Both, products);
 
                         var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(protein.Item3,
-                                protein.Item3.SelectedIonMZ.Value, protein.Item3.SelectedIonChargeStateGuess.Value,
+                                protein.Item3.SelectedIonMZ.Value, protein.Item5,
+                        //protein.Item3.SelectedIonChargeStateGuess.Value,
                                 dataFile.FilePath, new CommonParameters()),
                             products, new CommonParameters());
 
                         peptideGroup.Add(
-                            new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double>( peptide, match, protein.Item4));
+                            new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>( peptide, match, protein.Item4, protein.Item5));
                     }
                 }
-            });
+            }
 
 
             SaveAsJson(savingJsonPath);
@@ -134,7 +136,8 @@ namespace TaskLayer
                     Modifications = String.Join(", ", peptide.Item1.AllModsOneIsNterminus
                         .Select(x => $"{x.Value.IdWithMotif}").ToArray()),
                     SequenceCoverage = peptide.Item2.Count,
-                    MMmatch = peptide.Item3
+                    MMmatch = peptide.Item3,
+                    Charge = peptide.Item4
                 });
             }
             var options = new JsonSerializerOptions { WriteIndented = true };

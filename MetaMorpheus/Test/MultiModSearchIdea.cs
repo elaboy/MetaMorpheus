@@ -116,6 +116,57 @@ namespace Test
         }
 
         [Test]
+        public void RunTopDown()
+        {
+            //MsDataFile msDataFile = MsDataFileReader.GetDataFile(@"D:\\08-30-22_bottomup\\test.mzML");
+            //msDataFile.LoadAllStaticData();
+            //var scanList = msDataFile.GetAllScansList();
+
+            List<string> filePaths = new List<string>()
+            {
+                @"D:\topDown\02-18-20_jurkat_td_rep2_fract10.raw",
+                @"D:\topDown\02-17-20_jurkat_td_rep2_fract2.raw",
+                @"D:\topDown\02-17-20_jurkat_td_rep2_fract3.raw",
+                @"D:\topDown\02-17-20_jurkat_td_rep2_fract4.raw",
+                @"D:\topDown\02-18-20_jurkat_td_rep2_fract5.raw",
+                @"D:\topDown\02-18-20_jurkat_td_rep2_fract6.raw",
+                @"D:\topDown\02-18-20_jurkat_td_rep2_fract7.raw",
+                @"D:\topDown\02-18-20_jurkat_td_rep2_fract8.raw",
+                @"D:\topDown\02-18-20_jurkat_td_rep2_fract9.raw"
+            };
+
+            var psms = PsmTsvReader.ReadTsv(@"D:\topDown\MOxAndBioMetArtModsGPTMD_Search\Task2-SearchTask\AllProteoforms.psmtsv", out List<string> warnings);
+
+            var filteredPsms = MMGPTMD.FilterPsm(psms).ToList();
+
+
+
+            MMGPTMD.WriteFilteredPsmsToTSV(filteredPsms, @"D:\topDown\example.psmtsv");
+
+            var filteredFile =
+                MMGPTMD.ReadFilteredPsmTSVShort(@"D:\topDown\example.psmtsv");
+
+            MMGPTMD.WriteFastaDBFromFilteredPsm(filteredFile,
+                @"D:\topDown\database_example.fasta");
+
+            var (scans, dataFile) = MMGPTMD.ExtractScansAndSourceFile(filteredFile, filePaths);
+
+            MsDataFile msDataFile = new GenericMsDataFile(scans, new("no nativeID format", "mzML format",
+                null, null, filePath: @"D:\topDown\test.mzML", null)); // dataFile.GetSourceFile());
+            // todo: update PSMTSV to reflect new mzML file, maybe modify after mzML creation or before?? Before would imply carrying counters maybe as an array or list?
+
+
+            MzmlMethods.CreateAndWriteMyMzmlWithCalibratedSpectra(msDataFile, @"D:\topDown\test.mzML", false);
+
+            MMGPTMD.UpdateTheFilteredPsmFile(msDataFile, @"D:\topDown\example.psmtsv");
+
+            Console.WriteLine("Done");
+
+            Assert.Pass();
+
+        }
+
+        [Test]
         public void TestMultiModDiscovery()
         {
             MMGPTMD.MultiModDiscovery(@"D:\08-30-22_bottomup\test.mzML");

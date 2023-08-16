@@ -59,7 +59,9 @@ namespace MultiModSearchViz
             int maxNumOfMods = int.Parse(this.maxNumOfMods.Text);
 
             List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
-                .Where(mod => mod.ModificationType.Contains("Common Biological")).ToList();
+                .Where(mod => mod.ModificationType.Contains("Common Biological") ||
+                              mod.ModificationType.Contains("Common Artifact") ||
+                              mod.ModificationType.Contains("Common Variable")).ToList();
 
 
 

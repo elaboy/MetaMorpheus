@@ -27,6 +27,8 @@ namespace TaskLayer
         public double[] MatchedMz { get; set; }
         public double[] MassErrorPpm { get; set; }
         public double[] MassErrorDa { get; set; }
+        public int Charge { get; set; }
+
 
         public static List<DataTable> GetDataTables(List<IGrouping<string, MultipleSearchResults>> results)
         {
@@ -59,6 +61,7 @@ namespace TaskLayer
                     row[14] = String.Join(", ", peptide.MatchedMz);
                     row[15] = String.Join(", ", peptide.MassErrorPpm);
                     row[16] = String.Join(", ", peptide.MassErrorDa);
+                    row[17] = peptide.Charge;
 
                     table.Rows.Add(row);
 

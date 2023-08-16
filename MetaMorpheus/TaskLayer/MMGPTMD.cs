@@ -503,7 +503,7 @@ namespace TaskLayer
                                 "Full Sequence\tMods\tMods Count\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
-                                "Matched Ion Series\tMatched Ion Counts\tPrecursor Mass";
+                                "Matched Ion Series\tMatched Ion Counts\tPrecursor Mass\tCharge";
 
                 writer.WriteLine(header);
                 foreach (var psm in filteredPsms)
@@ -525,7 +525,8 @@ namespace TaskLayer
                         psm.StartAndEndResiduesInProtein,
                         psm.MatchedIonSeries,
                         psm.MatchedIonCounts,
-                        psm.PrecursorMass
+                        psm.PrecursorMass,
+                        psm.Charge
                     };
                     writer.WriteLine(string.Join('\t', row));
                 }
@@ -584,7 +585,7 @@ namespace TaskLayer
                     {
                         //var ms1 = file.Value.GetMS1Scans().First();
                         MsDataScan ms2 = file.Value.GetOneBasedScan(int.Parse(psm.ScanNumber));
-                        var ms1 = file.Value.GetOneBasedScan((int)ms2.OneBasedPrecursorScanNumber);
+                        var ms1 = file.Value.GetOneBasedScan(int.Parse(psm.PrecursorScanNumber));
                         double[,] mzIntensitiesMS1 = new double[2, ms1.MassSpectrum.XArray.Length];
                         double[,] mzIntensitiesMS2 = new double[2, ms2.MassSpectrum.XArray.Length];
 
@@ -678,7 +679,7 @@ namespace TaskLayer
         {
             IEnumerable<PsmFromTsv> filteredPsms =
                 from psm in psms
-                where /*psm.QValue <= 0.0001 && psm.PEP <= 0.0001 && */psm.DecoyContamTarget.Equals("T") //&&
+                where psm.QValue <= 0.1 /*&& psm.PEP <= 0.0001*/ && psm.DecoyContamTarget.Equals("T") //&&
                       //PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
                 //where psm.QValue <= 0.001 && psm.PEP <= 0.001 && psm.DecoyContamTarget.Equals("T") &&
                 //      PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
@@ -729,14 +730,14 @@ namespace TaskLayer
                                 "Full Sequence\tMods\tMods Count\tProtein Accession\t " +
                                 "Protein Name\tGene Name\tOrganism Name\t" +
                                 "Start and End Residues in Protein\t" +
-                                "Matched Ion Series\tMatched Ion Counts\tPrecursor Mass";
+                                "Matched Ion Series\tMatched Ion Counts\tPrecursor Mass\tCharge";
 
                 writer.WriteLine(header);
                 foreach (var psm in filteredPsms)
                 {
                     string[] row = new[]
                     {
-                        String.Join('-', psm.FileNameWithoutExtension.Split('-').SkipLast(1)),
+                        String.Join('_', psm.FileNameWithoutExtension.Split(new [] {'_'})),
                         psm.Ms2ScanNumber.ToString(),
                         psm.PrecursorScanNum.ToString(),
                         psm.Score.ToString(),
@@ -755,7 +756,8 @@ namespace TaskLayer
                         psm.StartAndEndResiduesInProtein,
                         string.Join(' ', Enumerable.Select(psm.MatchedIons, x => x.Annotation).ToArray()),
                         psm.MatchedIons.Count().ToString(),
-                        psm.PrecursorMass.ToString()
+                        psm.PrecursorMass.ToString(),
+                        psm.PrecursorCharge.ToString(),
                     };
                     writer.WriteLine(string.Join('\t', row));
                 }
