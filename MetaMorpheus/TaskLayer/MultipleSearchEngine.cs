@@ -8,6 +8,7 @@ using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Data;
 using System.IO;
 using System.Linq;
@@ -16,6 +17,7 @@ using System.Threading.Tasks;
 using Proteomics.AminoAcidPolymer;
 using static Nett.TomlObjectFactory;
 using System.Drawing.Imaging;
+using System.Reflection.Metadata.Ecma335;
 using ICSharpCode.SharpZipLib;
 using MathNet.Numerics;
 using TorchSharp;
@@ -28,6 +30,9 @@ namespace TaskLayer
         public List<KeyValuePair<double, Modification[]>> CombinationsWithAddedMass { get; set; }
         public double[] MassArray { get; set; }
         public List<Tuple<double,Protein, MsDataScan, double, int>> ProteinListInferedFromGPTMD { get; private set; }
+        /// <summary>
+        /// double is MM score and int is precursorChargeState
+        /// </summary>
         public List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>> peptideGroup { get; private set; }
         public MultipleSearchEngine(List<FilteredPsmTSV> psmList, List<Modification> listOfMods, int numberOfVariableMods, List<Modification> fixedMods, MsDataFile dataFile,
             bool allCombos)
@@ -84,12 +89,16 @@ namespace TaskLayer
                 var possibleComboMods = GetCombinationsThatFitDelta(deltaMass);
 
                 var products = new List<Product>();
+                //Declare not to use list of mods position and mod
 
                 foreach (var combo in possibleComboMods)
                 {
+
                     var comboToTry = protein.Item2.Digest(new DigestionParams("top-down", 0),
                         fixedMods, combo);
 
+
+                    //Exclude those that are in the no go list Check
                     foreach (var peptide in comboToTry)
                     {
                         peptide.Fragment(protein.Item3.DissociationType ?? DissociationType.HCD,
@@ -97,18 +106,160 @@ namespace TaskLayer
 
                         var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(protein.Item3,
                                 protein.Item3.SelectedIonMZ.Value, protein.Item5,
-                        //protein.Item3.SelectedIonChargeStateGuess.Value,
                                 dataFile.FilePath, new CommonParameters()),
                             products, new CommonParameters());
 
-                        peptideGroup.Add(
+                        if(match.Count > 0)
+                            peptideGroup.Add(
                             new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>( peptide, match, protein.Item4, protein.Item5));
+
+                        //Add to the no go list generated from not improving position and mod
                     }
                 }
             }
 
 
             SaveAsJson(savingJsonPath);
+        }
+
+        /// <summary>
+        /// Returns the best candidate for the variant peptides.
+        /// Not the one with the highest count of matched fragment ions but the one with the best coverage.
+        /// </summary>
+        /// <param name="peptideVariants"></param>
+        /// <param name="modCombo"></param>
+        /// <param name="possibleCombosThatFitDelta"></param>
+        /// <param name="dataScan"></param>
+        /// <param name="dataFilePath"></param>
+        /// <param name="precursorChargeState"></param>
+        /// <param name="products"></param>
+        /// <returns></returns>
+        private Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int> GetBestVariant(
+            IEnumerable<PeptideWithSetModifications> peptideVariants, List<Modification> modCombo,
+            List<List<Modification>> possibleCombosThatFitDelta, MsDataScan dataScan, string dataFilePath,
+            int precursorChargeState, List<Product> products)
+        {
+            List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, List<Product>>> variantsTuplesList = new();
+            
+            foreach (var peptide in peptideVariants)
+            {
+                peptide.Fragment(dataScan.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both, products);
+
+                var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(dataScan,
+                    dataScan.SelectedIonMZ.Value,
+                    precursorChargeState, dataFilePath, new CommonParameters()), products, new CommonParameters());
+
+                variantsTuplesList.Add(
+                    new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, List<Product>>(
+                        peptide, match, products));
+            }
+
+            var groupedSortedPeptides = variantsTuplesList.GroupBy(x => x.Item1.AllModsOneIsNterminus);
+
+            List<Tuple<int[], int[]>> BYMatchesFromEachGroup = new();
+
+            foreach (var group in groupedSortedPeptides)
+            {
+                var (encodedB, encodedY) =
+                    FragmentMatchEncoder(group.First().Item1, group.First().Item2, group.First().Item3);
+                BYMatchesFromEachGroup.Add(new Tuple<int[], int[]>(encodedB, encodedY));
+            }
+
+
+        }
+
+        /// <summary>
+        /// Decide either to remove combos with that amino acid position or stay with it to reduce unnecessary computation time. 
+        /// </summary>
+        /// <param name="peptide"></param>
+        /// <param name="matchedFragmentIons"></param>
+        /// <param name="inSilicoProducts"></param>
+        /// <returns></returns>
+        private (int[], int[]) FragmentMatchEncoder(PeptideWithSetModifications peptide, List<MatchedFragmentIon> matchedFragmentIons, List<Product> inSilicoProducts)
+        {
+            //Get arrays of ion fragments to compare
+            var temp = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.y)
+                .Select(x => x.NeutralTheoreticalProduct.ProductType.ToString() + x.NeutralTheoreticalProduct.FragmentNumber);
+            var matchedYFragmentIons = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.y)
+                .Select(x => x.NeutralTheoreticalProduct.ProductType.ToString() + x.NeutralTheoreticalProduct.FragmentNumber);
+            var matchedBFragmentIons = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.b)
+                .Select(x => x.NeutralTheoreticalProduct.ProductType.ToString() + x.NeutralTheoreticalProduct.FragmentNumber);
+
+            var inSilicoYFragmentIons = inSilicoProducts.Where(ion => ion.ProductType == ProductType.y)
+                .Select(x => x.ProductType.ToString() + x.FragmentNumber);
+            var inSilicoBFragmentIons = inSilicoProducts.Where(ion => ion.ProductType == ProductType.b)
+                .Select(x => x.ProductType.ToString() + x.FragmentNumber);
+
+            var modLocations = peptide.AllModsOneIsNterminus; //get the mod and location in peptide
+
+            int[] bFragmentEncodedMatch = FormHotOneEncodedMatchArray(matchedBFragmentIons.ToArray(), inSilicoBFragmentIons.ToArray());
+            int[] yFragmentEncodedMatch = FormHotOneEncodedMatchArray(matchedYFragmentIons.ToArray(), inSilicoYFragmentIons.ToArray());
+
+            return (bFragmentEncodedMatch, yFragmentEncodedMatch);
+        }
+
+        /// <summary>
+        /// Get hits of b and y ions
+        /// </summary>
+        /// <param name="bFragmentEncodedMatch"></param>
+        /// <param name="yFragmentEncodedMatch"></param>
+        /// <returns></returns>
+        private (int, int) GetBYScores(int[] bFragmentEncodedMatch, int[] yFragmentEncodedMatch)
+        {
+            int bScore = 0;
+            int yScore = 0;
+
+            foreach (var b in bFragmentEncodedMatch)
+            {
+                if (b == 1) bScore++;
+            }
+
+            foreach (var y in yFragmentEncodedMatch)
+            {
+                if (y == 1) yScore++;
+            }
+
+            return (bScore, yScore);
+        }
+
+        /// <summary>
+        /// array representing all positions in products, 1 is matched, 0 is not matched
+        /// </summary>
+        /// <returns></returns>
+        private int[] FormHotOneEncodedMatchArray(string[] matchedArray, string[] productArray)
+        {
+            int[] zerosArray = new int[productArray.Count()];
+
+            for (int i = 0; i < productArray.Count(); i++)
+            {
+                if (i > matchedArray.Count())
+                    break;
+                
+                if (productArray[i] == matchedArray[i])
+                    zerosArray[i] = 1;
+            }
+            
+            return zerosArray;
+        }
+
+        /// <summary>
+        /// Compares both matched and insilico ion products and returns the index of the last matching fragment present in both. [b,y respectively]
+        /// </summary>
+        /// <param name="inSilicoProductsArray"></param>
+        /// <param name="matchedProductsArray"></param>
+        private int CompareIonMatches(string[] inSilicoProductsArray, string[] matchedProductsArray)
+        {
+            
+            for (int i = 0; i < matchedProductsArray.Length; i++)
+            {
+                if (matchedProductsArray[i] != inSilicoProductsArray[i])
+                {
+                    return i + 1;
+                }
+            }
+
+            //returns -1 if all fragment ions matched!
+            return -1;
         }
 
         private void SaveAsJson(string savingJsonPath)
