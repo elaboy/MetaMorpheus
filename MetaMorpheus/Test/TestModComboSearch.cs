@@ -13,13 +13,16 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Easy.Common.Extensions;
 using ExCSS;
 using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
 using iText.StyledXmlParser.Jsoup.Helper;
+using Proteomics.AminoAcidPolymer;
 using TaskLayer;
 using ThermoFisher.CommonCore.Data;
+using TorchSharp;
 using UsefulProteomicsDatabases;
 
 namespace Test
@@ -27,6 +30,182 @@ namespace Test
     public sealed class TestModComboSearch
     {
         private const string _filteredPsm = @"D:\08-30-22_bottomup\example.psmtsv";
+
+        #region TEST ENCODING MANUAL
+
+        //MsDataFile
+        private const string _dataFile =
+            @"D:\08-30-22_bottomup\fractionated\08-31-22_fractionated_human_Tryp_40ug_F7.raw";
+
+        //peptide 1
+        private string[] _peptide1 = new[]
+        {
+            "08-31-22_fractionated_human_Tryp_40ug_F7-calib",
+            "25726",
+            "25711",
+            "44.376",
+            "AASAAAASAAAASAASGSPGPGEGSAGGEKR",
+            "[UniProt:N-acetylalanine on A]AASAAAASAAAASAAS[Common Biological:Phosphorylation on S]GSPGPGEGSAGGEKR",
+            "N-acetylalanine on A Phosphorylation on S",
+            "2",
+            "Q13263",
+            "Transcription intermediary factor 1-beta",
+            "primary:TRIM28, synonym:KAP1, synonym:RNF96, synonym:TIF1B",
+            "Homo sapiens",
+            "2 to 32",
+            "[y1+1, y2+1, y4+1, y5+1, y6+1, y7+1, y8+1, y9+1, y10+1, y11+1, y12+1, y13+1, y16+1, (y16-97.98)+1, y17+1, (y17-97.98)+1, y18+1, (y18-97.98)+1, y19+1, (y19-97.98)+1, y20+1, (y20-97.98)+1, y21+1, (y21-97.98)+1, y22+1, (y22-97.98)+1, (y23-97.98)+1];[b2+1, b3+1, b4+1, b5+1, b6+1, b7+1, b8+1, b9+1, b10+1, b11+1, b12+1, b13+1, b15+1, (b24-97.98)+1];[(M0-97.98)+2]",
+            "42",
+            "2664.17846",
+            "2"
+        };
+
+        //peptide 2
+
+        private string[] _peptide2 = new[]
+        {
+            "08-31-22_fractionated_human_Tryp_40ug_F7-calib",
+            "49967",
+            "49954",
+            "38.301",
+            "LASPSGSTSSGLEVVAPEGTSAPGGGPGTLDDSATICR",
+            "LASPS[Common Biological:Phosphorylation on S]GSTSSGLEVVAPEGTSAPGGGPGTLDDSATIC[Common Fixed:Carbamidomethyl on C]R",
+            "Carbamidomethyl on C Phosphorylation on S",
+            "1",
+            "Q13263",
+            "Transcription intermediary factor 1-beta",
+            "primary:TRIM28, synonym:KAP1, synonym:RNF96, synonym:TIF1B",
+            "Homo sapiens",
+            "592 to 629",
+            "[y1+1, y2+1, y3+1, y4+1, y5+1, y6+1, y7+1, y8+1, y9+1, y10+1, y11+1, y12+1, y13+1, y14+1, y15+1, y16+2, y17+1, y18+1, y19+1, y20+1, y22+2, y23+2];[(b6-97.98)+1, (b7-97.98)+1, (b8-97.98)+1, (b10-97.98)+1, b11+1, (b11-97.98)+1, b12+1, (b12-97.98)+1, b13+1, (b13-97.98)+1, b14+1, (b14-97.98)+1, b15+1, (b15-97.98)+1, b16+1, (b16-97.98)+1]",
+            "38",
+            "3637.64432",
+            "3"
+        };
+        #endregion
+
+        [Test]
+        public void TestEncodingMatchingManuallyTwoExamples()
+        {
+            var mods =
+                Loaders.LoadUnimod(
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                    .ToList();
+
+            var fixedMods = new List<Modification>();
+            fixedMods.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
+
+
+            var dataFile = MsDataFileReader.GetDataFile(_dataFile);
+            var psm1 = new FilteredPsmTSV()
+            {
+                FileName = _peptide1[0],
+                ScanNumber = _peptide1[1],
+                PrecursorScanNumber = _peptide1[2],
+                Score = _peptide1[3],
+                BaseSeq = _peptide1[4],
+                FullSeq = _peptide1[5],
+                Mods = _peptide1[6],
+                ModsCount = _peptide1[7],
+                ProteinAccession = _peptide1[8],
+                ProteinName = _peptide1[9],
+                GeneName = _peptide1[10],
+                OrganismName = _peptide1[11],
+                StartAndEndResiduesInProtein = _peptide1[12],
+                MatchedIonSeries = _peptide1[13], 
+                MatchedIonCounts = _peptide1[14],
+                PrecursorMass = _peptide1[15],
+                Charge = _peptide1[16]
+            };
+            var scanForPsm1 = dataFile.GetOneBasedScan(int.Parse(psm1.ScanNumber));
+            var psm2 = new FilteredPsmTSV(_peptide2);
+
+            //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+            //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
+            List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+                .Where(mod => mod.ModificationType.Contains("Common Biological") || mod.ModificationType.Contains("UniProt")).ToList();
+
+            var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>(){psm1}, commonBiologycalMods, 2, fixedMods, dataFile, true);
+
+            List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>>> tempMatches = new();
+
+            var protein = new Protein(psm1.BaseSeq, psm1.ProteinAccession);
+
+            var peptideFromProtein = new PeptideWithSetModifications(protein, new DigestionParams("top-down"), 1,
+                psm1.BaseSeq.Length,
+                CleavageSpecificity.Full, "", 0, new Dictionary<int, Modification>(), 1);
+
+            var fixedModPeptide = peptideFromProtein.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
+                new List<Modification>());
+
+            var deltaMass = Math.Abs(fixedModPeptide.First().MonoisotopicMass - double.Parse(psm1.PrecursorMass));
+
+            var possibleComboMods = engine.GetCombinationsThatFitDelta(deltaMass);
+
+            var products = new List<Product>();
+
+            List<Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>> matchesList = new();
+
+            List<Tuple<int, List<Modification>>> modsToIgnore = new(); //mods to ignore, to avoid unnecessary checks 
+
+            foreach (var combo in possibleComboMods)
+            {
+                var comboToTry =
+                    peptideFromProtein.Protein.Digest(new DigestionParams("top-down", 0), fixedMods, combo);
+
+                Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> tempMatchesFragmentIons = new();
+
+                List<PeptideWithSetModifications> filteredPeptides = new();
+                if (modsToIgnore.Count > 0)
+                {
+                    foreach (var mod in modsToIgnore)
+                    {
+                        foreach (var peptide in comboToTry)
+                        {
+                            foreach (var key in peptide.AllModsOneIsNterminus)
+                            {
+                                if (key.Key >= mod.Item1 && !mod.Item2.Select(x => x.IdWithMotif).Equals(key.Value.IdWithMotif))
+                                {
+                                    filteredPeptides.Add(peptide);
+
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    {
+                        filteredPeptides = comboToTry.ToList();
+                    }
+                }
+
+                List<Tuple<int[], int[]>> encodedMatches = new();
+
+                foreach (var peptide in filteredPeptides)
+                {
+                    peptide.Fragment(DissociationType.HCD, FragmentationTerminus.Both, products);
+
+                    var match = MetaMorpheusEngine.MatchFragmentIons(
+                        new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value, int.Parse(psm1.Charge), dataFile.FilePath,
+                            new CommonParameters()), products, new CommonParameters());
+
+                    var (encodedB, encodedY) = engine.FragmentMatchEncoder(peptide, match, products);
+
+                    encodedMatches.Add(new Tuple<int[], int[]>(encodedB, encodedY));
+
+                    tempMatchesFragmentIons.Add(peptide, match);
+
+                }
+
+                //Get rid of bad variants
+
+                matchesList.Add(tempMatchesFragmentIons);
+            }
+
+            var testingSorted = 
+                matchesList.OrderByDescending(x => 
+                    x.Values.Count());
+        }
 
         //[Test]
         //public void TestMultiModSearch()

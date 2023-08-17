@@ -165,7 +165,7 @@ namespace TaskLayer
                 BYMatchesFromEachGroup.Add(new Tuple<int[], int[]>(encodedB, encodedY));
             }
 
-
+            return new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>(null, null, 1, 2);
         }
 
         /// <summary>
@@ -175,7 +175,7 @@ namespace TaskLayer
         /// <param name="matchedFragmentIons"></param>
         /// <param name="inSilicoProducts"></param>
         /// <returns></returns>
-        private (int[], int[]) FragmentMatchEncoder(PeptideWithSetModifications peptide, List<MatchedFragmentIon> matchedFragmentIons, List<Product> inSilicoProducts)
+        public (int[], int[]) FragmentMatchEncoder(PeptideWithSetModifications peptide, List<MatchedFragmentIon> matchedFragmentIons, List<Product> inSilicoProducts)
         {
             //Get arrays of ion fragments to compare
             var temp = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.y)
@@ -232,7 +232,7 @@ namespace TaskLayer
 
             for (int i = 0; i < productArray.Count(); i++)
             {
-                if (i > matchedArray.Count())
+                if (i > matchedArray.Count() - 1)
                     break;
                 
                 if (productArray[i] == matchedArray[i])
@@ -473,9 +473,9 @@ namespace TaskLayer
         /// <param name="psm"></param>
         /// <param name="dataFile"></param>
         /// <returns></returns>
-        private List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
+        public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(10);
+            var tolerance = new PpmTolerance(40);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 

@@ -2,23 +2,26 @@
 {
     public class FilteredPsmTSV
     {
-        public string FileName;
-        public string ScanNumber;
-        public string PrecursorScanNumber;
-        public string Score;
-        public string BaseSeq;
-        public string FullSeq;
-        public string Mods;
-        public string ModsCount;
-        public string ProteinAccession;
-        public string ProteinName;
-        public string GeneName;
-        public string OrganismName;
-        public string StartAndEndResiduesInProtein;
-        public string MatchedIonSeries;
-        public string MatchedIonCounts;
-        public string PrecursorMass;
-        public string Charge;
+        public string FileName { get; set; }
+        public string ScanNumber { get; set; }
+        public string PrecursorScanNumber { get; set; }
+        public string Score { get; set; }
+        public string BaseSeq { get; set; }
+        public string FullSeq { get; set; }
+        /// <summary>
+        /// refers to the variable mods, not fixed mods
+        /// </summary>
+        public string Mods { get; set; }
+        public string ModsCount { get; set; }
+        public string ProteinAccession { get; set; }
+        public string ProteinName { get; set; }
+        public string GeneName { get; set; }
+        public string OrganismName { get; set; }
+        public string StartAndEndResiduesInProtein { get; set; }
+        public string MatchedIonSeries { get; set; }
+        public string MatchedIonCounts { get; set; }
+        public string PrecursorMass { get; set; }
+        public string Charge { get; set; }
         public FilteredPsmTSV(string[] psm)
         {
             FileName = psm[0];
@@ -38,6 +41,10 @@
             MatchedIonCounts = psm[14];
             PrecursorMass = psm[15];
             Charge = psm[16];
+        }
+
+        public FilteredPsmTSV()
+        {
         }
     }
 
