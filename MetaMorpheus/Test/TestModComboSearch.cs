@@ -18,6 +18,7 @@ using System.Threading.Tasks;
 using Easy.Common.Extensions;
 using ExCSS;
 using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
+using iText.Layout.Margincollapse;
 using iText.StyledXmlParser.Jsoup.Helper;
 using Proteomics.AminoAcidPolymer;
 using TaskLayer;
@@ -190,6 +191,9 @@ namespace Test
                             new CommonParameters()), products, new CommonParameters());
 
                     var (encodedB, encodedY) = engine.FragmentMatchEncoder(peptide, match, products);
+
+                    if (match.Count == 0)
+                        continue;
 
                     encodedMatches.Add(new Tuple<int[], int[]>(encodedB, encodedY));
 
