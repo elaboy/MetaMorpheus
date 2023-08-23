@@ -475,7 +475,7 @@ namespace TaskLayer
         /// <returns></returns>
         public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(40);
+            var tolerance = new PpmTolerance(50);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 
