@@ -18,9 +18,11 @@ using Proteomics.AminoAcidPolymer;
 using static Nett.TomlObjectFactory;
 using System.Drawing.Imaging;
 using System.Reflection.Metadata.Ecma335;
+using System.Security.Cryptography;
 using ICSharpCode.SharpZipLib;
 using MathNet.Numerics;
 using TorchSharp;
+using UsefulProteomicsDatabases;
 
 namespace TaskLayer
 {
@@ -34,6 +36,18 @@ namespace TaskLayer
         /// double is MM score and int is precursorChargeState
         /// </summary>
         public List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>> peptideGroup { get; private set; }
+        private List<Dictionary<int, Modification>> ModsToIgnore { get; set; }
+        private List<MsDataFile> msDataFiles; //for later use 
+
+        /// <summary>
+        /// Constructor for the engine
+        /// </summary>
+        /// <param name="psmList"></param>
+        /// <param name="listOfMods"></param>
+        /// <param name="numberOfVariableMods"></param>
+        /// <param name="fixedMods"></param>
+        /// <param name="dataFile"></param>
+        /// <param name="allCombos"></param>
         public MultipleSearchEngine(List<FilteredPsmTSV> psmList, List<Modification> listOfMods, int numberOfVariableMods, List<Modification> fixedMods, MsDataFile dataFile,
             bool allCombos)
         {
@@ -46,6 +60,7 @@ namespace TaskLayer
             CombinationsWithAddedMass = CombinationsWithAddedMass.OrderBy(x => x.Key).ToList();
             MassArray = CombinationsWithAddedMass.Select(x => x.Key).ToArray();
             SetProteinsInfered(psmList, dataFile);
+            ModsToIgnore = new List<Dictionary<int, Modification>>();
             //SetPeptideGroup(fixedMods);
         }
 
@@ -117,149 +132,205 @@ namespace TaskLayer
                     }
                 }
             }
-
-
+            
             SaveAsJson(savingJsonPath);
         }
 
-        /// <summary>
-        /// Returns the best candidate for the variant peptides.
-        /// Not the one with the highest count of matched fragment ions but the one with the best coverage.
-        /// </summary>
-        /// <param name="peptideVariants"></param>
-        /// <param name="modCombo"></param>
-        /// <param name="possibleCombosThatFitDelta"></param>
-        /// <param name="dataScan"></param>
-        /// <param name="dataFilePath"></param>
-        /// <param name="precursorChargeState"></param>
-        /// <param name="products"></param>
-        /// <returns></returns>
-        private Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int> GetBestVariant(
-            IEnumerable<PeptideWithSetModifications> peptideVariants, List<Modification> modCombo,
-            List<List<Modification>> possibleCombosThatFitDelta, MsDataScan dataScan, string dataFilePath,
-            int precursorChargeState, List<Product> products)
+        public Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> SearchForMods(List<Modification> fixedMods,
+            List<List<Modification>> possibleModsThatFitDeltaMass, IEnumerable<PeptideWithSetModifications> peptidesToSearch,
+            MsDataScan scanForPsm1, FilteredPsmTSV psm1, MsDataFile dataFile)
         {
-            List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, List<Product>>> variantsTuplesList = new();
-            
-            foreach (var peptide in peptideVariants)
+            List<PeptideWithSetModifications> filteredPeptides = new();
+            if (ModsToIgnore.Count > 0)
             {
-                peptide.Fragment(dataScan.DissociationType ?? DissociationType.HCD, FragmentationTerminus.Both, products);
+                filteredPeptides = FilterPeptidesWithModsToIgnore(peptidesToSearch);
+            }
+            else
+            {
+                filteredPeptides = peptidesToSearch.ToList();
+            }
+            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> tempMatchesFragmentIons = new(); //b and y fragments tuple
 
-                var match = MetaMorpheusEngine.MatchFragmentIons(new Ms2ScanWithSpecificMass(dataScan,
-                    dataScan.SelectedIonMZ.Value,
-                    precursorChargeState, dataFilePath, new CommonParameters()), products, new CommonParameters());
+            var bProducts = new List<Product>();
+            var yProducts = new List<Product>();
 
-                variantsTuplesList.Add(
-                    new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, List<Product>>(
-                        peptide, match, products));
+            foreach (var peptide in filteredPeptides)
+            {
+                peptide.Fragment(DissociationType.HCD, FragmentationTerminus.N, bProducts);
+                peptide.Fragment(DissociationType.HCD, FragmentationTerminus.C, yProducts);
+
+                var bMatch = MetaMorpheusEngine.MatchFragmentIons(
+                    new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value,
+                        int.Parse(psm1.Charge), dataFile.FilePath,
+                        new CommonParameters()), bProducts, new CommonParameters());
+
+                var yMatch = MetaMorpheusEngine.MatchFragmentIons(
+                    new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value,
+                        int.Parse(psm1.Charge), dataFile.FilePath,
+                        new CommonParameters()), yProducts, new CommonParameters());
+
+                if (!tempMatchesFragmentIons.ContainsKey(peptide))
+                    tempMatchesFragmentIons.Add(peptide, new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
             }
 
-            var groupedSortedPeptides = variantsTuplesList.GroupBy(x => x.Item1.AllModsOneIsNterminus);
+            //Get rid of zero matching on either side
+            var tempMatchesFragmentIonsWithoutZeros =
+                tempMatchesFragmentIons.Where(x => x.Value.Item1.Count > 0 && x.Value.Item2.Count > 0);
 
-            List<Tuple<int[], int[]>> BYMatchesFromEachGroup = new();
+            if (tempMatchesFragmentIonsWithoutZeros.Count() == 0)
+                return new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
-            foreach (var group in groupedSortedPeptides)
+            var goodMatches = AddNonCandidatesToModsToIgnore(tempMatchesFragmentIonsWithoutZeros);
+
+            var resultsBByDescending = goodMatches.OrderByDescending(x => x.Value.Item1.Count);
+            var resultsYByDescending = goodMatches.OrderByDescending(x => x.Value.Item2.Count);
+
+
+            var bestModsFromResultsBandY = resultsYByDescending.First().Key.AllModsOneIsNterminus;
+            foreach (var combo in resultsYByDescending.First().Key.AllModsOneIsNterminus)
             {
-                var (encodedB, encodedY) =
-                    FragmentMatchEncoder(group.First().Item1, group.First().Item2, group.First().Item3);
-                BYMatchesFromEachGroup.Add(new Tuple<int[], int[]>(encodedB, encodedY));
+                if(!bestModsFromResultsBandY.ContainsKey(combo.Key))
+                    bestModsFromResultsBandY.Add(combo.Key, combo.Value);
             }
+            //var bestModsFromResultsBandY = new Dictionary<int, Modification>();
 
-            return new Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>, double, int>(null, null, 1, 2);
+            //if (resultsYByDescending.First().Key.AllModsOneIsNterminus ==
+            //    resultsBByDescending.First().Key.AllModsOneIsNterminus)
+            //{
+            //    bestModsFromResultsBandY.Add(resultsBByDescending.First().Key.AllModsOneIsNterminus);
+            //}
+            //else
+            //{
+            //    bestModsFromResultsBandY.Add(resultsBByDescending.First().Key.AllModsOneIsNterminus);
+            //    bestModsFromResultsBandY.Add(resultsYByDescending.First().Key.AllModsOneIsNterminus);
+            //}
+
+            return GetBestPeptideMatch(bestModsFromResultsBandY, resultsBByDescending.First().Key.Protein, fixedMods,
+                scanForPsm1, psm1, dataFile);
         }
 
-        /// <summary>
-        /// Decide either to remove combos with that amino acid position or stay with it to reduce unnecessary computation time. 
-        /// </summary>
-        /// <param name="peptide"></param>
-        /// <param name="matchedFragmentIons"></param>
-        /// <param name="inSilicoProducts"></param>
-        /// <returns></returns>
-        public (int[], int[]) FragmentMatchEncoder(PeptideWithSetModifications peptide, List<MatchedFragmentIon> matchedFragmentIons, List<Product> inSilicoProducts)
+        private Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> GetBestPeptideMatch(Dictionary<int, Modification> bestModsFromBYMatching, Protein protein,
+            List<Modification> fixedMods, MsDataScan scanForPsm1, FilteredPsmTSV psm1, MsDataFile dataFile)
         {
-            //Get arrays of ion fragments to compare
-            var temp = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.y)
-                .Select(x => x.NeutralTheoreticalProduct.ProductType.ToString() + x.NeutralTheoreticalProduct.FragmentNumber);
-            var matchedYFragmentIons = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.y)
-                .Select(x => x.NeutralTheoreticalProduct.ProductType.ToString() + x.NeutralTheoreticalProduct.FragmentNumber);
-            var matchedBFragmentIons = matchedFragmentIons.Where(ion => ion.NeutralTheoreticalProduct.ProductType == ProductType.b)
-                .Select(x => x.NeutralTheoreticalProduct.ProductType.ToString() + x.NeutralTheoreticalProduct.FragmentNumber);
+            var secondRunResults = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
-            var inSilicoYFragmentIons = inSilicoProducts.Where(ion => ion.ProductType == ProductType.y)
-                .Select(x => x.ProductType.ToString() + x.FragmentNumber);
-            var inSilicoBFragmentIons = inSilicoProducts.Where(ion => ion.ProductType == ProductType.b)
-                .Select(x => x.ProductType.ToString() + x.FragmentNumber);
+            var secondRunPeptide = new PeptideWithSetModifications(protein,
+                new DigestionParams("top-down", 0), 1, protein.BaseSequence.Length,
+                CleavageSpecificity.Full, "", 0, bestModsFromBYMatching, 0);
 
-            var modLocations = peptide.AllModsOneIsNterminus; //get the mod and location in peptide
+            var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
+                bestModsFromBYMatching.Values.ToList());
 
-            int[] bFragmentEncodedMatch = FormHotOneEncodedMatchArray(matchedBFragmentIons.ToArray(), inSilicoBFragmentIons.ToArray());
-            int[] yFragmentEncodedMatch = FormHotOneEncodedMatchArray(matchedYFragmentIons.ToArray(), inSilicoYFragmentIons.ToArray());
-
-            return (bFragmentEncodedMatch, yFragmentEncodedMatch);
-        }
-
-        /// <summary>
-        /// Get hits of b and y ions
-        /// </summary>
-        /// <param name="bFragmentEncodedMatch"></param>
-        /// <param name="yFragmentEncodedMatch"></param>
-        /// <returns></returns>
-        private (int, int) GetBYScores(int[] bFragmentEncodedMatch, int[] yFragmentEncodedMatch)
-        {
-            int bScore = 0;
-            int yScore = 0;
-
-            foreach (var b in bFragmentEncodedMatch)
+            var secondProductsRun = new List<Product>();
+            foreach (var product in secondRunDigested.Distinct())
             {
-                if (b == 1) bScore++;
+                product.Fragment(DissociationType.HCD, FragmentationTerminus.Both, secondProductsRun);
+
+                var secondRunMatch = MetaMorpheusEngine.MatchFragmentIons(
+                    new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value,
+                        int.Parse(psm1.Charge), dataFile.FilePath,
+                        new CommonParameters()), secondProductsRun, new CommonParameters());
+
+                secondRunResults.Add(product, secondRunMatch);
             }
 
-            foreach (var y in yFragmentEncodedMatch)
-            {
-                if (y == 1) yScore++;
-            }
+            var bestMatch = secondRunResults.OrderByDescending(x =>
+                x.Value.Count).ThenByDescending(x => x.Value[0].NeutralTheoreticalProduct.FragmentNumber).First();
 
-            return (bScore, yScore);
+            var bestMatchDict = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
+            bestMatchDict.Add(bestMatch.Key, bestMatch.Value);
+
+            return bestMatchDict;
         }
-
         /// <summary>
-        /// array representing all positions in products, 1 is matched, 0 is not matched
+        /// returns non repeated matches and add to mods to ignore db combinations of mods that did not improve the matching.
         /// </summary>
+        /// <param name="matchedPeptides"></param>
         /// <returns></returns>
-        private int[] FormHotOneEncodedMatchArray(string[] matchedArray, string[] productArray)
+        private Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> AddNonCandidatesToModsToIgnore(
+            IEnumerable<KeyValuePair<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>> matchedPeptides)
         {
-            int[] zerosArray = new int[productArray.Count()];
+            var sorted = matchedPeptides
+                .OrderBy(x => x.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber)
+                .ThenBy(x => x.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber);
 
-            for (int i = 0; i < productArray.Count(); i++)
-            {
-                if (i > matchedArray.Count() - 1)
-                    break;
-                
-                if (productArray[i] == matchedArray[i])
-                    zerosArray[i] = 1;
-            }
-            
-            return zerosArray;
-        }
+            var goodMatches =
+                new Dictionary<PeptideWithSetModifications,
+                    Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>();
 
-        /// <summary>
-        /// Compares both matched and insilico ion products and returns the index of the last matching fragment present in both. [b,y respectively]
-        /// </summary>
-        /// <param name="inSilicoProductsArray"></param>
-        /// <param name="matchedProductsArray"></param>
-        private int CompareIonMatches(string[] inSilicoProductsArray, string[] matchedProductsArray)
-        {
-            
-            for (int i = 0; i < matchedProductsArray.Length; i++)
+            foreach (var match in sorted)
             {
-                if (matchedProductsArray[i] != inSilicoProductsArray[i])
+                if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
+                    match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber)
                 {
-                    return i + 1;
+                    ModsToIgnore.Add(match.Key.AllModsOneIsNterminus);
+                }
+                else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count || match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
+                {
+                    if (!goodMatches.Keys.Contains(match.Key))
+                        goodMatches.Add(match.Key, match.Value);
                 }
             }
 
-            //returns -1 if all fragment ions matched!
-            return -1;
+            return goodMatches;
+        }
+
+        private List<PeptideWithSetModifications> FilterPeptidesWithModsToIgnore(IEnumerable<PeptideWithSetModifications> peptideWithSetModifications)
+        {
+            List<PeptideWithSetModifications> filteredPeptides = new();
+
+            foreach (var peptide in peptideWithSetModifications)
+            {
+                if(!ModsToIgnore.Contains(peptide.AllModsOneIsNterminus))
+                    filteredPeptides.Add(peptide);
+            }
+
+            return filteredPeptides;
+        }
+
+        public MyTaskResults WriteToXMLDatabase(string outputPath, List<Protein> listOfProteins,
+            List<string> currentRawFileList, Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> searchResultsDictionary)
+        {
+            var additionalModsForProtein = new Dictionary<string, HashSet<Tuple<int, Modification>>>();
+            
+            var groupedByBaseSequence = searchResultsDictionary.GroupBy(x => x.Key.BaseSequence);
+
+            foreach (var id in groupedByBaseSequence)
+            {
+                List<Tuple<int, Modification>> tuplesHoldingMods = new();
+                foreach (var mods in id)
+                {
+                    foreach (var mod in mods.Key.AllModsOneIsNterminus)
+                    {
+                        tuplesHoldingMods.Add(new Tuple<int, Modification>(mod.Key, mod.Value));
+                    }
+                }
+                additionalModsForProtein.Add(id.Key, new HashSet<Tuple<int, Modification>>(tuplesHoldingMods));
+            }
+
+            var writtenMods = ProteinDbWriter.WriteXmlDatabase(additionalModsForProtein, listOfProteins, outputPath);
+
+            MyTaskResults myTaskResults = new MyTaskResults(new SearchTask())
+            {
+                NewDatabases = new List<DbForTask>()
+            };
+
+            myTaskResults.NewDatabases.Add(new DbForTask(outputPath, false));
+            myTaskResults.AddTaskSummaryText("Modifications Added: " + writtenMods.Select(x => x.Value).Sum());
+            myTaskResults.AddTaskSummaryText("Mods types and counts:");
+            myTaskResults.AddTaskSummaryText(string.Join(Environment.NewLine, writtenMods.OrderByDescending(b => b.Value)
+                .Select(b => "\t" + b.Key + "\t" + b.Value)));
+
+            return myTaskResults;
+        }
+
+        /// <summary>
+        /// Adds mods to a collection for ignoring mods that were not improving matching previously.
+        /// </summary>
+        /// <param name="modToIgnore"></param>
+        private void AddModsToIgnore(Dictionary<int, Modification> modToIgnore)
+        {
+            ModsToIgnore.Add(ModsToIgnore);
         }
 
         private void SaveAsJson(string savingJsonPath)
@@ -475,7 +546,7 @@ namespace TaskLayer
         /// <returns></returns>
         public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(50);
+            var tolerance = new PpmTolerance(800);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 

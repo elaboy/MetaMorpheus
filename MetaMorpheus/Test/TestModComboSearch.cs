@@ -17,6 +17,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Easy.Common.Extensions;
 using ExCSS;
+using Fizzler;
 using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
 using iText.Layout.Margincollapse;
 using iText.StyledXmlParser.Jsoup.Helper;
@@ -89,7 +90,7 @@ namespace Test
         {
             var mods =
                 Loaders.LoadUnimod(
-                        @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
                     .ToList();
 
             var fixedMods = new List<Modification>();
@@ -122,11 +123,16 @@ namespace Test
 
             //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
             //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
+
             List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
-                .Where(mod => mod.ModificationType.Contains("Common Biological")||
+                .Where(mod => mod.ModificationType.Contains("Common Biological") ||
                               mod.ModificationType.Contains("Common Artifact") ||
                               mod.ModificationType.Contains("Less Common") ||
-                              mod.ModificationType.Contains("Metals") || mod.ModificationType.Contains("UniProt")).ToList();
+                              mod.ModificationType.Contains("Metals") || 
+                              mod.ModificationType.Contains("UniProt")).ToList();
+
+            //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+            //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
 
             var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>(){psm1}, commonBiologycalMods, 3, fixedMods, dataFile, true);
 
@@ -233,9 +239,8 @@ namespace Test
                 new DigestionParams("top-down", 0), 1, resultsYByDescending.First().Key.BaseSequence.Length,
                 CleavageSpecificity.Full, "", 0, bestModsFromResultsBandY, 1);
 
-            var newDeltaMass =
-                engine.GetCombinationsThatFitDelta(secondRunPeptide.MonoisotopicMass -
-                                                   double.Parse(psm1.PrecursorMass));
+            var newDeltaMass = secondRunPeptide.MonoisotopicMass -
+                                                   double.Parse(psm1.PrecursorMass);
 
             var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
                 bestModsFromResultsBandY.Values.ToList());
@@ -254,6 +259,188 @@ namespace Test
                 secondRunResults.Add(product, secondRunMatch);
             }
 
+            var finalMatchResult = secondRunResults.OrderByDescending(x => x.Value.Count).First();
+            Assert.Equals(true, false);
+
+        }
+
+        [Test]
+        public void TestEncodingMatchingManuallyFixedModAsVariableTry()
+        {
+            var mods =
+                Loaders.LoadUnimod(
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml")
+                    .ToList();
+
+            var fixedMods = new List<Modification>();
+
+
+            var dataFile = MsDataFileReader.GetDataFile(_dataFile);
+            var psm1 = new FilteredPsmTSV()
+            {
+                FileName = _peptide1[0],
+                ScanNumber = _peptide1[1],
+                PrecursorScanNumber = _peptide1[2],
+                Score = _peptide1[3],
+                BaseSeq = _peptide1[4],
+                FullSeq = _peptide1[5],
+                Mods = _peptide1[6],
+                ModsCount = _peptide1[7],
+                ProteinAccession = _peptide1[8],
+                ProteinName = _peptide1[9],
+                GeneName = _peptide1[10],
+                OrganismName = _peptide1[11],
+                StartAndEndResiduesInProtein = _peptide1[12],
+                MatchedIonSeries = _peptide1[13],
+                MatchedIonCounts = _peptide1[14],
+                PrecursorMass = _peptide1[15],
+                Charge = _peptide1[16]
+            };
+            var scanForPsm1 = dataFile.GetOneBasedScan(int.Parse(psm1.ScanNumber));
+            var psm2 = new FilteredPsmTSV(_peptide2);
+
+            //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+            //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
+
+            List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+                .Where(mod => mod.ModificationType.Contains("Common Biological") ||
+                              mod.ModificationType.Contains("Common Artifact") ||
+                              mod.ModificationType.Contains("Less Common") ||
+                              mod.ModificationType.Contains("Metals") ||
+                              mod.ModificationType.Contains("UniProt")).ToList();
+
+            commonBiologycalMods.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
+
+
+            //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+            //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
+
+            var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>() { psm1 }, commonBiologycalMods, 3, fixedMods, dataFile, true);
+
+            List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>>> tempMatches = new();
+
+            var protein = new Protein(psm1.BaseSeq, psm1.ProteinAccession);
+
+            var peptideFromProtein = new PeptideWithSetModifications(protein, new DigestionParams("top-down"), 1,
+                psm1.BaseSeq.Length,
+                CleavageSpecificity.Full, "", 0, new Dictionary<int, Modification>(), 1);
+
+            var fixedModPeptide = peptideFromProtein.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
+                new List<Modification>());
+
+            var deltaMass = Math.Abs(fixedModPeptide.First().MonoisotopicMass - double.Parse(psm1.PrecursorMass));
+
+            var possibleComboMods = engine.GetCombinationsThatFitDelta(deltaMass);
+
+            var bProducts = new List<Product>();
+            var yProducts = new List<Product>();
+
+            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> matchesList = new();
+
+            List<Dictionary<int, Modification>> modsToIgnore = new(); //mods to ignore, to avoid unnecessary checks 
+
+
+            foreach (var combo in possibleComboMods)
+            {
+                var comboToTry =
+                    peptideFromProtein.Protein.Digest(new DigestionParams("top-down", 0), fixedMods, combo);
+
+                Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> tempMatchesFragmentIons = new(); //b and y fragments tuple
+
+                List<PeptideWithSetModifications> filteredPeptides = new();
+                if (modsToIgnore.Count > 0)
+                {
+                    foreach (var peptide in comboToTry)
+                    {
+                        if (!modsToIgnore.Contains(peptide.AllModsOneIsNterminus))
+                        {
+                            filteredPeptides.Add(peptide);
+                        }
+                    }
+                }
+                else
+                {
+                    {
+                        filteredPeptides = comboToTry.ToList();
+                    }
+                }
+
+
+                foreach (var peptide in filteredPeptides)
+                {
+                    peptide.Fragment(DissociationType.HCD, FragmentationTerminus.N, bProducts);
+                    peptide.Fragment(DissociationType.HCD, FragmentationTerminus.C, yProducts);
+
+                    var bMatch = MetaMorpheusEngine.MatchFragmentIons(
+                        new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value,
+                            int.Parse(psm1.Charge), dataFile.FilePath,
+                            new CommonParameters()), bProducts, new CommonParameters());
+
+                    var yMatch = MetaMorpheusEngine.MatchFragmentIons(
+                        new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value,
+                            int.Parse(psm1.Charge), dataFile.FilePath,
+                            new CommonParameters()), yProducts, new CommonParameters());
+
+                    if (!tempMatchesFragmentIons.ContainsKey(peptide))
+                        tempMatchesFragmentIons.Add(peptide, new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
+
+                }
+
+                var tempMatchesFragmentIonsWithoutZeros =
+                    tempMatchesFragmentIons.Where(x => x.Value.Item1.Count > 0 && x.Value.Item2.Count > 0);
+
+                var sorted = tempMatchesFragmentIonsWithoutZeros
+                    .OrderBy(x => x.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber)
+                    .ThenBy(x => x.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber);
+
+                //Get rid of bad variants
+                foreach (var match in sorted)
+                {
+                    if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
+                        match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber)
+                    {
+                        modsToIgnore.Add(match.Key.AllModsOneIsNterminus);
+                    }
+                    else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count || match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
+                    {
+                        if (!matchesList.Keys.Contains(match.Key))
+                            matchesList.Add(match.Key, match.Value);
+                    }
+                }
+            }
+            var resultsBByDescending = matchesList.OrderByDescending(x => x.Value.Item1.Count);
+            var resultsYByDescending = matchesList.OrderByDescending(x => x.Value.Item2.Count);
+            var groupedNoGo = modsToIgnore.SelectMany(x => x.Values);
+            var bestModsFromResultsBandY = new Dictionary<int, Modification>();
+            bestModsFromResultsBandY.Add(resultsBByDescending.First().Key.AllModsOneIsNterminus);
+            bestModsFromResultsBandY.Add(resultsYByDescending.First().Key.AllModsOneIsNterminus);
+
+
+            var secondRunPeptide = new PeptideWithSetModifications(resultsYByDescending.First().Key.Protein,
+                new DigestionParams("top-down", 0), 1, resultsYByDescending.First().Key.BaseSequence.Length,
+                CleavageSpecificity.Full, "", 0, bestModsFromResultsBandY, 1);
+
+            var newDeltaMass = secondRunPeptide.MonoisotopicMass -
+                                                   double.Parse(psm1.PrecursorMass);
+
+            var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
+                bestModsFromResultsBandY.Values.ToList());
+
+            var secondProductsRun = new List<Product>();
+            var secondRunResults = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
+            foreach (var product in secondRunDigested)
+            {
+                product.Fragment(DissociationType.HCD, FragmentationTerminus.Both, secondProductsRun);
+
+                var secondRunMatch = MetaMorpheusEngine.MatchFragmentIons(
+                    new Ms2ScanWithSpecificMass(scanForPsm1, scanForPsm1.SelectedIonMZ.Value,
+                        int.Parse(psm1.Charge), dataFile.FilePath,
+                        new CommonParameters()), secondProductsRun, new CommonParameters());
+
+                secondRunResults.Add(product, secondRunMatch);
+            }
+
+            var finalMatchResult = secondRunResults.OrderByDescending(x => x.Value.Count).First();
             Assert.Equals(true, false);
 
         }
@@ -480,6 +667,18 @@ namespace Test
             public double[] MassErrorDa { get; set; }
         }
 
+
+        [Test]
+        public void METHOD()
+        {
+            var temp = new List<PsmFromTsv>();
+
+
+            temp.Add(PsmTsvReader.ReadTsv(@"D:\topDown\MOxAndBioMetArtModsGPTMD_Search\Task2-SearchTask\AllPSMs.psmtsv", out List<string> warnings));
+            var baseSeqGroup = temp.GroupBy(x => new { x.BaseSeq});
+            var temp2 = temp.GroupBy(p => new { p.FullSequence, p.PreviousAminoAcid, p.NextAminoAcid });
+        }
+
         [Test]
         public static void Bubba()
         {
@@ -528,6 +727,77 @@ namespace Test
         public static string ModListNameString(List<Modification> list)
         {
             return String.Join("", list.Select(n => n.IdWithMotif));
+        }
+
+        [Test]
+        public void TestRefactoresSearchEngineOnTopDownData()
+        {
+            var mods =
+                Loaders.LoadUnimod(
+                        @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml").ToList();
+
+            var fixedMods = new List<Modification>();
+            //fixedMods.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C"))); toml indicates no fixed mods
+
+
+            var dataFile = MsDataFileReader.GetDataFile(@"D:\topDown\test.mzML");
+
+            List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
+                .Where(mod => 
+                    mod.ModificationType.Contains("Common Biological") || 
+                    mod.ModificationType.Contains("Common Artifact") ||
+                    mod.ModificationType.Contains("Less Common") ||
+                    mod.ModificationType.Contains("Metals") ||
+                    mod.ModificationType.Contains("UniProt")).ToList();
+
+            var psms = MMGPTMD.ReadFilteredPsmTSVShort(@"D:\topDown\example.psmtsv");
+            
+            var msDataFile = Readers.MsDataFileReader.GetDataFile(@"D:\topDown\test.mzML").LoadAllStaticData();
+
+            var engine = new MultipleSearchEngine(psms, commonBiologycalMods, 3, fixedMods, msDataFile, true);
+
+            var results = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
+
+            foreach(var protein in engine.ProteinListInferedFromGPTMD)
+            {
+                var peptide = protein.Item2.Digest(new DigestionParams("top-down", 0), fixedMods,
+                    new List<Modification>());
+
+                var deltaMass = protein.Item1 - peptide.First().MonoisotopicMass;
+
+                var possibleMods = engine.GetCombinationsThatFitDelta(deltaMass);
+
+                var psm = psms.Find(x => x.BaseSeq.Equals(protein.Item2.BaseSequence));
+
+                foreach (var mod in possibleMods)
+                {
+                    var bestCandidate = engine.SearchForMods(fixedMods, possibleMods,
+                        protein.Item2.Digest(new DigestionParams("top-down", 0), fixedMods, mod),
+                        msDataFile.GetOneBasedScan(int.Parse(psm.ScanNumber)), psm, msDataFile);
+
+                    if (results.Count == 0)
+                    {
+                        results.Add(bestCandidate);
+                        continue;
+                    }
+
+                    if (bestCandidate.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    if (!results.ContainsKey(bestCandidate.Keys.First()))
+                    {
+                        results.Add(bestCandidate);
+                    }
+                }
+
+
+            }
+
+            engine.WriteToXMLDatabase(@"D:\topDown\databaseFromMods.xml",
+                engine.ProteinListInferedFromGPTMD.Select(x => x.Item2).ToList(), new List<string>(){ msDataFile.FilePath }, results);
+            //var groupedResults = results.GroupBy(x => x.Key.BaseSequence);
         }
     }
 
