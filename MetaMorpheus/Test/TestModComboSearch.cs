@@ -796,7 +796,8 @@ namespace Test
             }
 
             engine.WriteToXMLDatabase(@"D:\topDown\databaseFromMods.xml",
-                engine.ProteinListInferedFromGPTMD.Select(x => x.Item2).ToList(), new List<string>(){ msDataFile.FilePath }, results);
+                engine.ProteinListInferedFromGPTMD.Select(x => x.Item2).ToList(),
+                new List<string>(){ msDataFile.FilePath }, results);
             //var groupedResults = results.GroupBy(x => x.Key.BaseSequence);
         }
     }

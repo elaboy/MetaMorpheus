@@ -1,4 +1,4 @@
-﻿namespace TaskLayer
+﻿namespace EngineLayer.CombinatorialSearch
 {
     public class FilteredPsmTSV
     {

@@ -9,6 +9,7 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using EngineLayer.CombinatorialSearch;
 using TaskLayer;
 using TorchSharp;
 using UsefulProteomicsDatabases;
