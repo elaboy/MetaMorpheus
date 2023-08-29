@@ -1,27 +1,15 @@
 ﻿using EngineLayer;
 using MassSpectrometry;
-using Nett;
 using NUnit.Framework;
+using Proteomics;
 using Readers;
+using ScottPlot;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
-using System.Xml.Serialization;
-using Newtonsoft.Json;
-using Proteomics;
 using TaskLayer;
-using System.Threading.Tasks;
-using iText.IO.Source;
-using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
-using Proteomics.Fragmentation;
-using Proteomics.ProteolyticDigestion;
 using UsefulProteomicsDatabases;
-using ScottPlot;
-using ScottPlot.Renderable;
-using TorchSharp;
-using MathNet.Numerics.Random;
 
 namespace Test
 {

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using MzLibUtil;
+using System.IO;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -348,6 +349,30 @@ namespace EngineLayer.CombinatorialSearch
         private static string ModListNameString(List<Modification> list)
         {
             return String.Join("", list.Select(n => n.IdWithMotif));
+        }
+
+        /// <summary>
+        /// Reads the PSMTSV file into a FilteredPsmTSV object (custom class for developing, later won't be necessary)
+        /// </summary>
+        /// <param name="path"></param>
+        /// <returns></returns>
+        public static List<FilteredPsmTSV> ReadFilteredPsmTSVShort(string path)
+        {
+            List<FilteredPsmTSV> filteredList = new List<FilteredPsmTSV>();
+
+            using (var reader = new StreamReader(path))
+            {
+                reader.ReadLine();
+                string[] lineCheck;
+                while (reader.EndOfStream == false)
+                {
+                    var line = reader.ReadLine().Split('\t');
+                    FilteredPsmTSV filteredPsm = new FilteredPsmTSV(line);
+                    filteredList.Add(filteredPsm);
+                }
+            }
+
+            return filteredList;
         }
     }
 }
