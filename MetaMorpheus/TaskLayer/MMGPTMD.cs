@@ -15,6 +15,7 @@ using System.Collections.Immutable;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using EngineLayer.CombinatorialSearch;
 using TopDownProteomics;
 using TorchSharp;
 using UsefulProteomicsDatabases;

@@ -16,6 +16,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Easy.Common.Extensions;
+using EngineLayer.CombinatorialSearch;
 using ExCSS;
 using Fizzler;
 using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
@@ -674,9 +675,12 @@ namespace Test
             var temp = new List<PsmFromTsv>();
 
 
-            temp.Add(PsmTsvReader.ReadTsv(@"D:\topDown\MOxAndBioMetArtModsGPTMD_Search\Task2-SearchTask\AllPSMs.psmtsv", out List<string> warnings));
+            temp.Add(PsmTsvReader.ReadTsv(
+                @"D:\topDown\MOxAndBioMetArtModsGPTMD_Search\Task2-SearchTask\AllPSMs.psmtsv",
+                out List<string> warnings));
             var baseSeqGroup = temp.GroupBy(x => new { x.BaseSeq});
-            var temp2 = temp.GroupBy(p => new { p.FullSequence, p.PreviousAminoAcid, p.NextAminoAcid });
+            var temp2 = temp.GroupBy(p => new { p.FullSequence, p.PreviousAminoAcid,
+                p.NextAminoAcid });
         }
 
         [Test]
@@ -730,6 +734,13 @@ namespace Test
         }
 
         [Test]
+        public void METHOD23()
+        {
+            var runner = new EverythingRunnerEngine();
+            runner.Run();
+        }
+
+        [Test]
         public void TestRefactoresSearchEngineOnTopDownData()
         {
             var mods =
@@ -754,13 +765,15 @@ namespace Test
             
             var msDataFile = Readers.MsDataFileReader.GetDataFile(@"D:\topDown\test.mzML").LoadAllStaticData();
 
-            var engine = new MultipleSearchEngine(psms, commonBiologycalMods, 3, fixedMods, msDataFile, true);
+            var engine = new MultipleSearchEngine(psms, commonBiologycalMods, 3,
+                fixedMods, msDataFile, true);
 
             var results = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
             foreach(var protein in engine.ProteinListInferedFromGPTMD)
             {
-                var peptide = protein.Item2.Digest(new DigestionParams("top-down", 0), fixedMods,
+                var peptide = protein.Item2
+                    .Digest(new DigestionParams("top-down", 0), fixedMods,
                     new List<Modification>());
 
                 var deltaMass = protein.Item1 - peptide.First().MonoisotopicMass;
@@ -772,7 +785,8 @@ namespace Test
                 foreach (var mod in possibleMods)
                 {
                     var bestCandidate = engine.SearchForMods(fixedMods, possibleMods,
-                        protein.Item2.Digest(new DigestionParams("top-down", 0), fixedMods, mod),
+                        protein.Item2.Digest(new DigestionParams("top-down", 0),
+                            fixedMods, mod),
                         msDataFile.GetOneBasedScan(int.Parse(psm.ScanNumber)), psm, msDataFile);
 
                     if (results.Count == 0)

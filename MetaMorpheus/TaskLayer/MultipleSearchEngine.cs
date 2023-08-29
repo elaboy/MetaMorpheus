@@ -19,6 +19,7 @@ using static Nett.TomlObjectFactory;
 using System.Drawing.Imaging;
 using System.Reflection.Metadata.Ecma335;
 using System.Security.Cryptography;
+using EngineLayer.CombinatorialSearch;
 using ICSharpCode.SharpZipLib;
 using MathNet.Numerics;
 using TorchSharp;
@@ -48,8 +49,8 @@ namespace TaskLayer
         /// <param name="fixedMods"></param>
         /// <param name="dataFile"></param>
         /// <param name="allCombos"></param>
-        public MultipleSearchEngine(List<FilteredPsmTSV> psmList, List<Modification> listOfMods, int numberOfVariableMods, List<Modification> fixedMods, MsDataFile dataFile,
-            bool allCombos)
+        public MultipleSearchEngine(List<FilteredPsmTSV> psmList, List<Modification> listOfMods, int numberOfVariableMods,
+            List<Modification> fixedMods, MsDataFile dataFile, bool allCombos)
         {
             List<List<Modification>> comboList = new();
             CombinationsWithAddedMass = new();

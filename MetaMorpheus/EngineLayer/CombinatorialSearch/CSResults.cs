@@ -1,12 +1,27 @@
-﻿using System;
+﻿using Proteomics;
+using Proteomics.Fragmentation;
+using Proteomics.ProteolyticDigestion;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace EngineLayer.CombinatorialSearch
 {
-    internal class CSResults
+    public class CSResults : MetaMorpheusEngineResults
     {
+        private Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> matchedPeptidesDictionary { get; set; }
+        private List<Modification> ModsUsedForSearch { get; set; }
+
+        /// <summary>
+        /// Results Constructor.
+        /// </summary>
+        /// <param name="s"></param>
+        /// <param name="matchedPeptidesResults"></param>
+        /// <param name="modsUsed"></param>
+        public CSResults(MetaMorpheusEngine s, Dictionary<PeptideWithSetModifications,
+            List<MatchedFragmentIon>> matchedPeptidesResults, List<Modification> modsUsed) : base(s)
+        {
+            matchedPeptidesDictionary = matchedPeptidesResults;
+            ModsUsedForSearch = modsUsed;
+
+        }
     }
 }
