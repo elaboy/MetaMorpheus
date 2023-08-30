@@ -71,11 +71,13 @@ namespace EngineLayer.CombinatorialSearch
         }
         protected override MetaMorpheusEngineResults RunSpecific()
         {
+            Dictionary<string, HashSet<Tuple<int, Modification>>> modsUsedDictionary = new();
             Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
+
             foreach (var protein in ProteinListInferedFromGPTMD)
             {
                 var peptide = protein.Item2
-                    .Digest(new DigestionParams("top-down", 0), FixedMods,
+                    .Digest(new DigestionParams(/*"top-down", 0*/), FixedMods,
                         new List<Modification>());
 
                 var deltaMass = protein.Item1 - peptide.First().MonoisotopicMass;
@@ -84,10 +86,11 @@ namespace EngineLayer.CombinatorialSearch
 
                 var psm = PsmsList.Find(x => x.BaseSeq.Equals(protein.Item2.BaseSequence));
 
+                
                 foreach (var mod in possibleMods)
                 {
                     var bestCandidate = SearchForMods(FixedMods, possibleMods,
-                        protein.Item2.Digest(new DigestionParams("top-down", 0),
+                        protein.Item2.Digest(new DigestionParams(/*"top-down", 0*/),
                             FixedMods, mod),
                         MsDataFile.GetOneBasedScan(int.Parse(psm.ScanNumber)), psm, MsDataFile);
 
@@ -106,10 +109,30 @@ namespace EngineLayer.CombinatorialSearch
                     {
                         resultsFromSearch.Add(bestCandidate);
                     }
+
+                    if (modsUsedDictionary.ContainsKey(protein.Item2.BaseSequence))
+                    {
+                        foreach (var peptideWithMods in bestCandidate)
+                        {
+                            foreach (var modInDict in peptideWithMods.Key.AllModsOneIsNterminus)
+                            {
+                                modsUsedDictionary[protein.Item2.BaseSequence].Add(new Tuple<int, Modification>(
+                                    modInDict.Key,
+                                    modInDict.Value));
+
+                            }
+                        }
+                    }
+                    else
+                    {
+                        modsUsedDictionary.Add(protein.Item2.BaseSequence, new HashSet<Tuple<int, Modification>>());
+                    }
                 }
             }
 
-            return new CSResults(this, resultsFromSearch, CombinationOfModifications.SelectMany(x => x).ToList());
+            return new CSResults(this, modsUsedDictionary, 
+                CombinationOfModifications.SelectMany(x => x).ToList(),
+                ProteinListInferedFromGPTMD.Select(x => x.Item2).ToList());
         }
 
         /// <summary>
@@ -206,10 +229,10 @@ namespace EngineLayer.CombinatorialSearch
             var secondRunResults = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
             var secondRunPeptide = new PeptideWithSetModifications(protein,
-                new DigestionParams("top-down", 0), 1, protein.BaseSequence.Length,
+                new DigestionParams(/*"top-down", 0*/), 1, protein.BaseSequence.Length,
                 CleavageSpecificity.Full, "", 0, bestModsFromBYMatching, 0);
 
-            var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
+            var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams(/*"top-down", 0*/), fixedMods,
                 bestModsFromBYMatching.Values.ToList());
 
             var secondProductsRun = new List<Product>();
@@ -274,7 +297,7 @@ namespace EngineLayer.CombinatorialSearch
         /// <returns></returns>
         public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(1000);
+            var tolerance = new PpmTolerance(40);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 

@@ -692,7 +692,8 @@ namespace Test
             File.WriteAllLines(@"E:\junk\mods.txt", completeListOfModCombinations.Select(n => ModListNameString(n)).ToArray());
             Assert.AreEqual(1, 0);
         }
-        public static void Mc(List<Modification> sortedListOfModsToAdd, ref List<List<Modification>> listOfModCombinations, int maxNumberOfModsInGroup, bool allModsFromOneToN)
+        public static void Mc(List<Modification> sortedListOfModsToAdd, ref List<List<Modification>> listOfModCombinations,
+            int maxNumberOfModsInGroup, bool allModsFromOneToN)
         {
             List<List<Modification>> newModLists = new();
             if (maxNumberOfModsInGroup == 0)
@@ -734,8 +735,18 @@ namespace Test
         [Test]
         public void METHOD23()
         {
-            var task = new CSTask();
-            var runner = new EverythingRunnerEngine();
+            var taskList = new List<(string, MetaMorpheusTask)>();
+            var CSTask = new CSTask(new CommonParameters());
+
+            taskList.Add(("CS-Task", CSTask));
+
+            List<DbForTask> dbForTask = new List<DbForTask>();
+            dbForTask.Add(new DbForTask(@"D:\08-30-22_bottomup\example.psmtsv", false));
+
+            var runner = new EverythingRunnerEngine(taskList,
+                new List<string>() { @"D:\08-30-22_bottomup\test.mzML" },
+                dbForTask, @"D:\TestingCSTask");
+
             runner.Run();
         }
 

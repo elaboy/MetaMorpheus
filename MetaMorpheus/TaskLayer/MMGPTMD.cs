@@ -680,13 +680,13 @@ namespace TaskLayer
         {
             IEnumerable<PsmFromTsv> filteredPsms =
                 from psm in psms
-                where psm.QValue <= 0.0001 && psm.PEP <= 0.0001 && psm.DecoyContamTarget.Equals("T") //&&
-                      //PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
+                where psm.QValue <= 0.0001 && psm.PEP <= 0.0001 && psm.DecoyContamTarget.Equals("T") && //&&
+                      PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
                 //where psm.QValue <= 0.001 && psm.PEP <= 0.001 && psm.DecoyContamTarget.Equals("T") &&
                 //      PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
                 select psm;
 
-            return filteredPsms.Take(10).Distinct();
+            return filteredPsms.Take(40).Distinct();
         }
 
         public static void WriteFilteredPsmsToTSVFull(List<PsmFromTsv> filteredPsms, string path)

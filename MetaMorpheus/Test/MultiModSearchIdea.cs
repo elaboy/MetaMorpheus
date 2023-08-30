@@ -88,8 +88,8 @@ namespace Test
 
             var (scans, dataFile) = MMGPTMD.ExtractScansAndSourceFile(filteredFile, filePaths);
 
-            MsDataFile msDataFile = new GenericMsDataFile(scans, new("no nativeID format", "mzML format",
-                null, null, filePath: @"D:\08-30-22_bottomup\test.mzML", null)); // dataFile.GetSourceFile());
+            MsDataFile msDataFile = new GenericMsDataFile(scans, new SourceFile("no nativeID format", "mzML format",
+                null, null,  new Uri(@"D:\\08-30-22_bottomup\\test.mzML"),null,  "fileName")); // dataFile.GetSourceFile());
             // todo: update PSMTSV to reflect new mzML file, maybe modify after mzML creation or before?? Before would imply carrying counters maybe as an array or list?
 
 
