@@ -63,7 +63,7 @@ namespace TaskLayer.CombinatorialSearchTask
             // output results
             //var writtenModsIntoDB = ProteinDbWriter.WriteXmlDatabase()
             var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
-                csResults.ListOfProteins, "testingTasks.xml");
+                csResults.ListOfProteins, @"D:\TestingCSTask\testingTasks.xml");
 
             FinishedWritingFile(@"D:\TestingCSTask", new List<string>() {taskId});
             MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
