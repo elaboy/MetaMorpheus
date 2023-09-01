@@ -741,7 +741,7 @@ namespace Test
             taskList.Add(("CS-Task", CSTask));
 
             List<DbForTask> dbForTask = new List<DbForTask>();
-            dbForTask.Add(new DbForTask(@"D:\08-30-22_bottomup\example.psmtsv", false));
+            dbForTask.Add(new DbForTask(@"D:\08-30-22_bottomup\database_example.fasta", false));
 
             var runner = new EverythingRunnerEngine(taskList,
                 new List<string>() { @"D:\08-30-22_bottomup\test.mzML" },

@@ -27,12 +27,15 @@ namespace TaskLayer
 
         public GptmdParameters GptmdParameters { get; set; }
 
-        protected override MyTaskResults RunSpecific(string OutputFolder, List<DbForTask> dbFilenameList, List<string> currentRawFileList, string taskId, FileSpecificParameters[] fileSettingsList)
+        protected override MyTaskResults RunSpecific(string OutputFolder, List<DbForTask> dbFilenameList, List<string> currentRawFileList,
+            string taskId, FileSpecificParameters[] fileSettingsList)
         {
-            LoadModifications(taskId, out var variableModifications, out var fixedModifications, out var localizeableModificationTypes);
+            LoadModifications(taskId, out var variableModifications, out var fixedModifications,
+                out var localizeableModificationTypes);
 
             // TODO: print error messages loading GPTMD mods
-            List<Modification> gptmdModifications = GlobalVariables.AllModsKnown.OfType<Modification>().Where(b => GptmdParameters.ListOfModsGptmd.Contains((b.ModificationType, b.IdWithMotif))).ToList();
+            List<Modification> gptmdModifications = GlobalVariables.AllModsKnown.OfType<Modification>()
+                .Where(b => GptmdParameters.ListOfModsGptmd.Contains((b.ModificationType, b.IdWithMotif))).ToList();
             IEnumerable<Tuple<double, double>> combos = LoadCombos(gptmdModifications).ToList();
 
             // load proteins
@@ -43,7 +46,8 @@ namespace TaskLayer
             var numRawFiles = currentRawFileList.Count;
 
             // write prose settings
-            ProseCreatedWhileRunning.Append("The following G-PTM-D settings were used: "); ProseCreatedWhileRunning.Append("protease = " + CommonParameters.DigestionParams.Protease + "; ");
+            ProseCreatedWhileRunning.Append("The following G-PTM-D settings were used: ");
+            ProseCreatedWhileRunning.Append("protease = " + CommonParameters.DigestionParams.Protease + "; ");
             ProseCreatedWhileRunning.Append("maximum missed cleavages = " + CommonParameters.DigestionParams.MaxMissedCleavages + "; ");
             ProseCreatedWhileRunning.Append("minimum peptide length = " + CommonParameters.DigestionParams.MinPeptideLength + "; ");
             ProseCreatedWhileRunning.Append(CommonParameters.DigestionParams.MaxPeptideLength == int.MaxValue ?
@@ -61,7 +65,8 @@ namespace TaskLayer
             ProseCreatedWhileRunning.Append("precursor mass tolerance(s) = {" + tempSearchMode.ToProseString() + "}; ");
 
             ProseCreatedWhileRunning.Append("product mass tolerance = " + CommonParameters.ProductMassTolerance + ". ");
-            ProseCreatedWhileRunning.Append("The combined search database contained " + proteinList.Count(p => !p.IsDecoy) + " non-decoy protein entries including " + proteinList.Where(p => p.IsContaminant).Count() + " contaminant sequences. ");
+            ProseCreatedWhileRunning.Append("The combined search database contained " + proteinList.Count(p => !p.IsDecoy) + " non-decoy protein entries including " +
+                                            proteinList.Where(p => p.IsContaminant).Count() + " contaminant sequences. ");
 
             // start the G-PTM-D task
             Status("Running G-PTM-D...", new List<string> { taskId });
@@ -134,7 +139,8 @@ namespace TaskLayer
             }
 
             // run GPTMD engine
-            var gptmdResults = (GptmdResults)new GptmdEngine(allPsms, gptmdModifications, combos, filePathToPrecursorMassTolerance, CommonParameters, this.FileSpecificParameters, new List<string> { taskId }).Run();
+            var gptmdResults = (GptmdResults)new GptmdEngine(allPsms, gptmdModifications, combos, filePathToPrecursorMassTolerance,
+                CommonParameters, this.FileSpecificParameters, new List<string> { taskId }).Run();
 
             // Stop if canceled
             if (GlobalVariables.StopLoops) { return MyTaskResults; }

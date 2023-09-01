@@ -1,11 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using EngineLayer;
+using EngineLayer.ClassicSearch;
 using EngineLayer.CombinatorialSearch;
+using MassSpectrometry;
+using MzLibUtil;
 using Proteomics;
 using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
@@ -51,12 +55,57 @@ namespace TaskLayer.CombinatorialSearchTask
                 CommonParameters));
 
             MyTaskResults = new(this) { NewDatabases = new List<DbForTask>() };
-            // search 
+            
+            // Classic Search 
+
+            LoadModifications(taskId, out var variableModifications, out var fixedModifications,
+                out var localizableModificationTypes);
+
+            List<Protein> proteinList = LoadProteins(taskId, dbFilenameList, true, DecoyType.Reverse,
+                localizableModificationTypes, CommonParameters);
+
+            List<PeptideSpectralMatch> allPsms = new List<PeptideSpectralMatch>();
+
+            //Engine instance to get mods mass array for the MassDiffAcceptor, will be later running with .Run()
+
+            var engine = new CSEngine(psms, commonBiologicalMods, 3, fixedMods, true,
+                new CommonParameters(), dataFile, fileSpecificParameters,
+                new List<string>() { "Combinatorial-Search" });
+            MyFileManager myFileManager = new MyFileManager(true);
+
+            for (int i = 0; i < currentRawFileList.Count; i++)
+            {
+                var dataFileName = currentRawFileList[i];
+
+                CommonParameters combinedParams = SetAllFileSpecificCommonParams(CommonParameters, fileSettingsList[i]);
+
+                MassDiffAcceptor searchMode = new DotMassDiffAcceptor("", engine.MassArray.Distinct().AsEnumerable(),
+                    combinedParams.PrecursorMassTolerance);
+
+                NewCollection(Path.GetFileName(dataFileName), new List<string>{taskId, "Individual Spectra Files", dataFileName});
+                MsDataFile myDataFile = myFileManager.LoadFile(dataFileName, combinedParams);
+                Ms2ScanWithSpecificMass[] arrayOfMs2ScansSortedByMass =
+                    GetMs2Scans(myDataFile, dataFileName, combinedParams).OrderBy(x => x.PrecursorMass).ToArray();
+                myFileManager.DoneWithFile(dataFileName);
+                PeptideSpectralMatch[] allPsmsArray = new PeptideSpectralMatch[arrayOfMs2ScansSortedByMass.Length];
+
+                // search
+                new ClassicSearchEngine(allPsmsArray, arrayOfMs2ScansSortedByMass, variableModifications, fixedModifications,
+                    null, null, null,
+                    proteinList, searchMode, combinedParams, this.FileSpecificParameters, null,
+                    new List<string>(){taskId, "Individual Spectra Files", dataFileName}, false).Run();
+
+                allPsms.AddRange(allPsmsArray.Where(x => x != null));
+                FinishedDataFile(dataFileName, new List<string>(){taskId, "Individual Spectra Files", dataFileName});
+            }
+
+            allPsms = allPsms.OrderByDescending(b => b.Score)
+                .ThenBy(b => b.PeptideMonisotopicMass.HasValue ? Math.Abs(b.ScanPrecursorMass - b.PeptideMonisotopicMass.Value) : double.MaxValue)
+                .GroupBy(b => new Tuple<string, int, double?>(b.FullFilePath, b.ScanNumber, b.PeptideMonisotopicMass))
+                .Select(b => b.First()).ToList();
 
             // CS stuff 
-            var csResults = (CSResults)new CSEngine(psms, commonBiologicalMods, 3, fixedMods, true,
-                new CommonParameters(), dataFile, fileSpecificParameters, new List<string>(){ "Combinatorial-Search" })
-                .Run();
+            var csResults = (CSResults)engine.Run();
 
 
             
