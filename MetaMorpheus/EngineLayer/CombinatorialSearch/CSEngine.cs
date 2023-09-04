@@ -9,6 +9,8 @@ using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using MzLibUtil;
 using System.IO;
+using FlashLFQ;
+using Microsoft.ML.Transforms;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -22,6 +24,7 @@ namespace EngineLayer.CombinatorialSearch
         private List<Dictionary<int, Modification>> ModsToIgnore { get; set; }
         private List<Modification> FixedMods { get; set; }
         private List<FilteredPsmTSV> PsmsList { get; set; }
+        public List<PeptideSpectralMatch> Psms { get; set; }
         private MsDataFile MsDataFile { get; set; }
 
         /// <summary>
@@ -34,22 +37,26 @@ namespace EngineLayer.CombinatorialSearch
         /// <param name="commonParameters"></param>
         /// <param name="fileSpecificParameters"></param>
         /// <param name="nestedIds"></param>
-        public CSEngine(List<FilteredPsmTSV> psmList, List<Modification> listOfMods, int numberOfVariableMods, List<Modification> fixedMods,
-            bool allCombos, CommonParameters commonParameters, MsDataFile dataFile,
-            List<(string FileName, CommonParameters Parameters)> fileSpecificParameters, List<string> nestedIds) 
+        public CSEngine(List<PeptideSpectralMatch> peptideSpectralMatches, List<List<Modification>> listOfModCombos,
+            List<KeyValuePair<double, Modification[]>> numberOfVariableMods, List<Modification> fixedMods,
+            CommonParameters commonParameters, MsDataFile dataFile, List<(string FileName, CommonParameters Parameters)> fileSpecificParameters,
+            List<string> nestedIds) 
             : base(commonParameters, fileSpecificParameters, nestedIds)
         {
-            List<List<Modification>> comboList = new();
-            CombinationsWithAddedMass = new();
-            CombinationBuilder(listOfMods, ref comboList, numberOfVariableMods, allCombos);
-            CombinationOfModifications = comboList;
-            CombinationsWithAddedMass.Add(CombinationOfModifications.Select(x => new KeyValuePair<double, Modification[]>(
-                key: x.Select(x => x.MonoisotopicMass.Value).Sum(), value: x.Select(x => x).ToArray())));
-            CombinationsWithAddedMass = CombinationsWithAddedMass.OrderBy(x => x.Key).ToList();
-            MassArray = CombinationsWithAddedMass.Select(x => x.Key).ToArray();
-            SetProteinsInfered(psmList, dataFile);
+            Psms = peptideSpectralMatches;
+            CombinationOfModifications = listOfModCombos;
+            CombinationsWithAddedMass = numberOfVariableMods;
+            //List<List<Modification>> comboList = new();
+            //CombinationsWithAddedMass = new();
+            ////CombinationBuilder(listOfMods, ref comboList, numberOfVariableMods, allCombos);
+            ////CombinationOfModifications = comboList;
+            //CombinationsWithAddedMass.Add(CombinationOfModifications.Select(x => new KeyValuePair<double, Modification[]>(
+            //    key: x.Select(x => x.MonoisotopicMass.Value).Sum(), value: x.Select(x => x).ToArray())));
+            //CombinationsWithAddedMass = CombinationsWithAddedMass.OrderBy(x => x.Key).ToList();
+            //MassArray = CombinationsWithAddedMass.Select(x => x.Key).ToArray();
+            //SetProteinsInfered(psmList, dataFile);
             ModsToIgnore = new List<Dictionary<int, Modification>>();
-            PsmsList = psmList;
+            //PsmsList = psmList;
             MsDataFile = dataFile;
             FixedMods = fixedMods;
         }
@@ -77,6 +84,12 @@ namespace EngineLayer.CombinatorialSearch
             Dictionary<string, HashSet<Tuple<int, Modification>>> modsUsedDictionary = new();
             lock (modsUsedDictionary)
             {
+                //Parallel.ForEach(Psms, psm =>
+                //{
+                //    var peptide = new PeptideWithSetModifications(new Protein(psm.))
+                //}
+
+
                 Parallel.ForEach(ProteinListInferedFromGPTMD, protein =>
                 {
                     Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
@@ -371,6 +384,7 @@ namespace EngineLayer.CombinatorialSearch
             }
 
         }
+
         /// <summary>
         /// Returns the Modifications IdWithMotif joined. For CombinationBuilder use.
         /// </summary>

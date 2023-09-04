@@ -741,10 +741,39 @@ namespace Test
             taskList.Add(("CS-Task", CSTask));
 
             List<DbForTask> dbForTask = new List<DbForTask>();
-            dbForTask.Add(new DbForTask(@"D:\08-30-22_bottomup\database_example.fasta", false));
+            dbForTask.Add(new DbForTask(
+                @"D:\08-30-22_bottomup\uniprotkb_accession_A0A0C5B5G6_OR_access_2023_09_01.fasta", 
+                false));
 
             var runner = new EverythingRunnerEngine(taskList,
                 new List<string>() { @"D:\08-30-22_bottomup\test.mzML" },
+                dbForTask, @"D:\TestingCSTask");
+
+            runner.Run();
+        }
+        [Test]
+        public void METHOD23_FullFiles()
+        {
+            var taskList = new List<(string, MetaMorpheusTask)>();
+            var CSTask = new CSTask(new CommonParameters());
+
+            taskList.Add(("CS-Task", CSTask));
+
+            List<DbForTask> dbForTask = new List<DbForTask>();
+            dbForTask.Add(new DbForTask(
+                @"D:\08-30-22_bottomup\uniprotkb_accession_A0A0C5B5G6_OR_access_2023_09_01.fasta",
+                false));
+
+            var runner = new EverythingRunnerEngine(taskList,
+                new List<string>() { 
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F8-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F1-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F2-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F3-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F4-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F5-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F6-calib.mzML",
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F7-calib.mzML" },
                 dbForTask, @"D:\TestingCSTask");
 
             runner.Run();
