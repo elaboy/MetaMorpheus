@@ -5,6 +5,7 @@ using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -156,6 +157,7 @@ namespace EngineLayer.ClassicSearch
                         if (percentProgress > oldPercentProgress)
                         {
                             oldPercentProgress = percentProgress;
+                            Debug.WriteLine(oldPercentProgress);
                             ReportProgress(new ProgressEventArgs(percentProgress, "Performing classic search... ", NestedIds));
                         }
                     }

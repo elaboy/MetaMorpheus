@@ -78,6 +78,7 @@ namespace Test
             "3637.64432",
             "3"
         };
+
         #endregion
 
         [Test]
@@ -129,7 +130,8 @@ namespace Test
             //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
             //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
 
-            var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>() { psm1 }, commonBiologycalMods, 3, fixedMods, dataFile, true);
+            var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>() { psm1 }, commonBiologycalMods, 3,
+                fixedMods, dataFile, true);
 
             List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>>> tempMatches = new();
 
@@ -149,7 +151,8 @@ namespace Test
             var bProducts = new List<Product>();
             var yProducts = new List<Product>();
 
-            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> matchesList = new();
+            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>
+                matchesList = new();
 
             List<Dictionary<int, Modification>> modsToIgnore = new(); //mods to ignore, to avoid unnecessary checks 
 
@@ -159,7 +162,8 @@ namespace Test
                 var comboToTry =
                     peptideFromProtein.Protein.Digest(new DigestionParams("top-down", 0), fixedMods, combo);
 
-                Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> tempMatchesFragmentIons = new(); //b and y fragments tuple
+                Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>
+                    tempMatchesFragmentIons = new(); //b and y fragments tuple
 
                 List<PeptideWithSetModifications> filteredPeptides = new();
                 if (modsToIgnore.Count > 0)
@@ -196,7 +200,8 @@ namespace Test
                             new CommonParameters()), yProducts, new CommonParameters());
 
                     if (!tempMatchesFragmentIons.ContainsKey(peptide))
-                        tempMatchesFragmentIons.Add(peptide, new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
+                        tempMatchesFragmentIons.Add(peptide,
+                            new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
 
                 }
 
@@ -210,18 +215,22 @@ namespace Test
                 //Get rid of bad variants
                 foreach (var match in sorted)
                 {
-                    if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
-                        match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber)
+                    if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber >
+                        sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
+                        match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0]
+                            .NeutralTheoreticalProduct.FragmentNumber)
                     {
                         modsToIgnore.Add(match.Key.AllModsOneIsNterminus);
                     }
-                    else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count || match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
+                    else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count ||
+                             match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
                     {
                         if (!matchesList.Keys.Contains(match.Key))
                             matchesList.Add(match.Key, match.Value);
                     }
                 }
             }
+
             var resultsBByDescending = matchesList.OrderByDescending(x => x.Value.Item1.Count);
             var resultsYByDescending = matchesList.OrderByDescending(x => x.Value.Item2.Count);
             var groupedNoGo = modsToIgnore.SelectMany(x => x.Values);
@@ -235,7 +244,7 @@ namespace Test
                 CleavageSpecificity.Full, "", 0, bestModsFromResultsBandY, 1);
 
             var newDeltaMass = secondRunPeptide.MonoisotopicMass -
-                                                   double.Parse(psm1.PrecursorMass);
+                               double.Parse(psm1.PrecursorMass);
 
             var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
                 bestModsFromResultsBandY.Values.ToList());
@@ -310,7 +319,8 @@ namespace Test
             //List<Modification> commonBiologycalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
             //    .Where(mod => mod.IdWithMotif.Contains("Phosphorylation on S") || mod.IdWithMotif.Contains("N-acetylalanine")).ToList();
 
-            var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>() { psm1 }, commonBiologycalMods, 3, fixedMods, dataFile, true);
+            var engine = new MultipleSearchEngine(new List<FilteredPsmTSV>() { psm1 }, commonBiologycalMods, 3,
+                fixedMods, dataFile, true);
 
             List<Tuple<PeptideWithSetModifications, List<MatchedFragmentIon>>> tempMatches = new();
 
@@ -330,7 +340,8 @@ namespace Test
             var bProducts = new List<Product>();
             var yProducts = new List<Product>();
 
-            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> matchesList = new();
+            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>
+                matchesList = new();
 
             List<Dictionary<int, Modification>> modsToIgnore = new(); //mods to ignore, to avoid unnecessary checks 
 
@@ -340,7 +351,8 @@ namespace Test
                 var comboToTry =
                     peptideFromProtein.Protein.Digest(new DigestionParams("top-down", 0), fixedMods, combo);
 
-                Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> tempMatchesFragmentIons = new(); //b and y fragments tuple
+                Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>
+                    tempMatchesFragmentIons = new(); //b and y fragments tuple
 
                 List<PeptideWithSetModifications> filteredPeptides = new();
                 if (modsToIgnore.Count > 0)
@@ -377,7 +389,8 @@ namespace Test
                             new CommonParameters()), yProducts, new CommonParameters());
 
                     if (!tempMatchesFragmentIons.ContainsKey(peptide))
-                        tempMatchesFragmentIons.Add(peptide, new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
+                        tempMatchesFragmentIons.Add(peptide,
+                            new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
 
                 }
 
@@ -391,18 +404,22 @@ namespace Test
                 //Get rid of bad variants
                 foreach (var match in sorted)
                 {
-                    if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
-                        match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber)
+                    if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber >
+                        sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
+                        match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0]
+                            .NeutralTheoreticalProduct.FragmentNumber)
                     {
                         modsToIgnore.Add(match.Key.AllModsOneIsNterminus);
                     }
-                    else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count || match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
+                    else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count ||
+                             match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
                     {
                         if (!matchesList.Keys.Contains(match.Key))
                             matchesList.Add(match.Key, match.Value);
                     }
                 }
             }
+
             var resultsBByDescending = matchesList.OrderByDescending(x => x.Value.Item1.Count);
             var resultsYByDescending = matchesList.OrderByDescending(x => x.Value.Item2.Count);
             var groupedNoGo = modsToIgnore.SelectMany(x => x.Values);
@@ -416,7 +433,7 @@ namespace Test
                 CleavageSpecificity.Full, "", 0, bestModsFromResultsBandY, 1);
 
             var newDeltaMass = secondRunPeptide.MonoisotopicMass -
-                                                   double.Parse(psm1.PrecursorMass);
+                               double.Parse(psm1.PrecursorMass);
 
             var secondRunDigested = secondRunPeptide.Protein.Digest(new DigestionParams("top-down", 0), fixedMods,
                 bestModsFromResultsBandY.Values.ToList());
@@ -519,7 +536,8 @@ namespace Test
             List<Modification> chosenSubsetOfMods = commonVariableMods.ToArray()[0..5].ToList();
             List<List<Modification>> completeListOfModCombinations = new();
             Mc(chosenSubsetOfMods, ref completeListOfModCombinations, 3, false);
-            File.WriteAllLines(@"C:\Users\Edwin\Desktop\mods.txt", completeListOfModCombinations.Select(n => ModListNameString(n)).ToArray());
+            File.WriteAllLines(@"C:\Users\Edwin\Desktop\mods.txt",
+                completeListOfModCombinations.Select(n => ModListNameString(n)).ToArray());
             Assert.AreEqual(1, 0);
 
             Assert.IsTrue(false);
@@ -591,6 +609,7 @@ namespace Test
                         PeptideLength = peptide.Key.Protein.Length
                     });
                 }
+
                 peptideGroups.Add(groupedPeptides);
             });
             var options = new JsonSerializerOptions { WriteIndented = true };
@@ -607,6 +626,7 @@ namespace Test
                 {
                     table.Columns.Add(new DataColumn(feature.Name));
                 }
+
                 foreach (var peptide in result)
                 {
                     var individualPeptide = new MultiModSearchResults()
@@ -638,11 +658,13 @@ namespace Test
                     row[10] = String.Join(", ", individualPeptide.MassErrorPpm);
                     row[11] = String.Join(", ", individualPeptide.MassErrorDa);
                 }
+
                 proteinGroupsTables.Add(table);
             });
 
 
         }
+
         /// <summary>
         /// Groups of base sequences will be stored in this objecto to serialize into a xml database
         /// </summary>
@@ -684,15 +706,21 @@ namespace Test
         [Test]
         public static void Bubba()
         {
-            List<Modification> allAvailableMods = PtmListLoader.ReadModsFromFile(Path.Combine(TestContext.CurrentContext.TestDirectory, "ModificationTests", "CommonBiological.txt"), out var errors).ToList();
+            List<Modification> allAvailableMods = PtmListLoader
+                .ReadModsFromFile(
+                    Path.Combine(TestContext.CurrentContext.TestDirectory, "ModificationTests", "CommonBiological.txt"),
+                    out var errors).ToList();
 
             List<Modification> chosenSubsetOfMods = allAvailableMods.ToArray()[0..5].ToList();
             List<List<Modification>> completeListOfModCombinations = new();
             Mc(chosenSubsetOfMods, ref completeListOfModCombinations, 3, true);
-            File.WriteAllLines(@"E:\junk\mods.txt", completeListOfModCombinations.Select(n => ModListNameString(n)).ToArray());
+            File.WriteAllLines(@"E:\junk\mods.txt",
+                completeListOfModCombinations.Select(n => ModListNameString(n)).ToArray());
             Assert.AreEqual(1, 0);
         }
-        public static void Mc(List<Modification> sortedListOfModsToAdd, ref List<List<Modification>> listOfModCombinations,
+
+        public static void Mc(List<Modification> sortedListOfModsToAdd,
+            ref List<List<Modification>> listOfModCombinations,
             int maxNumberOfModsInGroup, bool allModsFromOneToN)
         {
             List<List<Modification>> newModLists = new();
@@ -702,6 +730,7 @@ namespace Test
                 {
                     newModLists.Add(new List<Modification>() { modificationToAdd });
                 }
+
                 newModLists = newModLists.DistinctBy(n => ModListNameString(n)).ToList();
                 listOfModCombinations = newModLists;
             }
@@ -718,15 +747,18 @@ namespace Test
                         newModLists.Add(newModList.OrderBy(n => n.IdWithMotif).ToList());
                     }
                 }
+
                 newModLists = newModLists.DistinctBy(n => ModListNameString(n)).ToList();
                 listOfModCombinations.AddRange(newModLists);
                 if (!allModsFromOneToN)
                 {
-                    listOfModCombinations = listOfModCombinations.Where(c => c.Count == maxNumberOfModsInGroup).ToList();
+                    listOfModCombinations =
+                        listOfModCombinations.Where(c => c.Count == maxNumberOfModsInGroup).ToList();
                 }
             }
 
         }
+
         public static string ModListNameString(List<Modification> list)
         {
             return String.Join("", list.Select(n => n.IdWithMotif));
@@ -742,7 +774,7 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\08-30-22_bottomup\uniprotkb_accession_A0A0C5B5G6_OR_access_2023_09_01.fasta", 
+                @"D:\08-30-22_bottomup\uniprotkb_accession_A0A0C5B5G6_OR_access_2023_09_01.fasta",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,
@@ -751,6 +783,7 @@ namespace Test
 
             runner.Run();
         }
+
         [Test]
         public void METHOD23_FullFiles()
         {
@@ -761,11 +794,12 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\08-30-22_bottomup\uniprotkb_accession_A0A0C5B5G6_OR_access_2023_09_01.fasta",
+                @"D:\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,
-                new List<string>() { 
+                new List<string>()
+                {
                     @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F8-calib.mzML",
                     @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F1-calib.mzML",
                     @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F2-calib.mzML",
@@ -773,7 +807,29 @@ namespace Test
                     @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F4-calib.mzML",
                     @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F5-calib.mzML",
                     @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F6-calib.mzML",
-                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F7-calib.mzML" },
+                    @"D:\08-30-22_bottomup\fractionated_search\Task1-CalibrateTask\08-31-22_fractionated_human_Tryp_40ug_F7-calib.mzML"
+                },
+                dbForTask, @"D:\TestingCSTask");
+
+            runner.Run();
+        }
+
+        [Test]
+        public void METHOD23_Unfractionated()
+        {
+            var taskList = new List<(string, MetaMorpheusTask)>();
+            var CSTask = new CSTask(new CommonParameters());
+
+            taskList.Add(("CS-Task", CSTask));
+
+            List<DbForTask> dbForTask = new List<DbForTask>();
+            dbForTask.Add(new DbForTask(
+                @"D:\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
+                false));
+
+            var runner = new EverythingRunnerEngine(taskList,
+                new List<string>() {
+                    @"D:\08-30-22_bottomup\unfractionated\Task1-CalibrateTask\08-29-22_unfractionated_human_Tryp-calib.mzML" },
                 dbForTask, @"D:\TestingCSTask");
 
             runner.Run();

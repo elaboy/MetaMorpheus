@@ -49,7 +49,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
             foreach (var filePath in currentRawFileList)
             {
-                var dataFile = Readers.MsDataFileReader.GetDataFile(filePath);
+                var dataFile = MsDataFileReader.GetDataFile(filePath);
                 fileSpecificParameters.Add((dataFile.GetSourceFile().FileName,
                     CommonParameters));
             }
@@ -80,10 +80,10 @@ namespace TaskLayer.CombinatorialSearchTask
             //    new List<string>() { "Combinatorial-Search" });
 
             MyFileManager myFileManager = new MyFileManager(true);
-            lock (allPsms)
-            {
-                //for (int i = 0; i < currentRawFileList.Count; i++)
-                Parallel.For(0, currentRawFileList.Count, i=>
+            //lock (allPsms)
+            //{
+                for (int i = 0; i < currentRawFileList.Count; i++)
+                //Parallel.For(0, currentRawFileList.Count, i=>
                 {
                     var dataFileName = currentRawFileList[i];
 
@@ -114,9 +114,9 @@ namespace TaskLayer.CombinatorialSearchTask
                     allPsms.AddRange(allPsmsArray.Where(x => x != null));
                     FinishedDataFile(dataFileName,
                         new List<string>() { taskId, "Individual Spectra Files", dataFileName });
-                });
+                }
 
-            }
+            //}
 
             allPsms = allPsms.OrderByDescending(b => b.Score)
                 .ThenBy(b => b.PeptideMonisotopicMass.HasValue ? Math.Abs(b.ScanPrecursorMass - b.PeptideMonisotopicMass.Value) : double.MaxValue)
@@ -135,20 +135,20 @@ namespace TaskLayer.CombinatorialSearchTask
             // CS stuff 
 
 
-            //var engine = new CSEngine(allPsms, listOfModCombinations, combinationsWithAddedMass, fixedMods, 
-            //    new CommonParameters(), new GenericMsDataFile(new []{}), fileSpecificParameters,
-            //    new List<string>() { "Combinatorial-Search" });
+            var engine = new CSEngine(allPsms, proteinList, listOfModCombinations, combinationsWithAddedMass, fixedMods,
+                new CommonParameters(), fileSpecificParameters,
+                new List<string>() { "Combinatorial-Search" });
 
-            //var csResults = (CSResults)engine.Run();
+            var csResults = (CSResults)engine.Run();
 
 
             // output results
             //var writtenModsIntoDB = ProteinDbWriter.WriteXmlDatabase()
-            //var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
-            //    csResults.ListOfProteins, @"D:\TestingCSTask\testingTasks.xml");
+            var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
+                csResults.ListOfProteins, @"D:\TestingCSTask\testingTasks.xml");
 
-            //FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
-            //MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
+            FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
+            MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
 
             return MyTaskResults;
         }
