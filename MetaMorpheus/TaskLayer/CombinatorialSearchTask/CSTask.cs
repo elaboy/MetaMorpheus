@@ -5,10 +5,13 @@ using MassSpectrometry;
 using Proteomics;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using EngineLayer.FdrAnalysis;
+using Microsoft.ML.Transforms;
+using Proteomics.Fragmentation;
 using Readers;
 using UsefulProteomicsDatabases;
 
@@ -29,7 +32,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
             var mods =
                 Loaders.LoadUnimod(
-                    @"C:\Users\elabo\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml").ToList();
+                    @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml").ToList();
 
             var fixedMods = new List<Modification>();
             fixedMods.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));
@@ -52,7 +55,7 @@ namespace TaskLayer.CombinatorialSearchTask
                 var dataFile = MsDataFileReader.GetDataFile(filePath);
                 fileSpecificParameters.Add((dataFile.GetSourceFile().FileName,
                     CommonParameters));
-            }
+            } //todo load this inside the forLoop
 
 
             MyTaskResults = new(this) { NewDatabases = new List<DbForTask>() };
@@ -135,22 +138,33 @@ namespace TaskLayer.CombinatorialSearchTask
             // CS stuff 
 
 
-            var engine = new CSEngine(allPsms, proteinList, listOfModCombinations, combinationsWithAddedMass, fixedMods,
+            var engine = new CSEngine(allPsms.Where(x => x.IsDecoy == false), proteinList,
+                listOfModCombinations, combinationsWithAddedMass, fixedMods,
                 new CommonParameters(), fileSpecificParameters,
                 new List<string>() { "Combinatorial-Search" });
 
             var csResults = (CSResults)engine.Run();
 
-
             // output results
             //var writtenModsIntoDB = ProteinDbWriter.WriteXmlDatabase()
             var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
-                csResults.ListOfProteins, @"D:\TestingCSTask\testingTasks.xml");
+                proteinList, @"D:\TestingCSTask\testingTasks.xml");
+
+            DataTable table = new DataTable();
+
+            table.Columns.Add("AccessionNumber", typeof(string));
+            table.Columns.Add("Features", typeof(int));
+
+            foreach (var protein in csResults.matchedPeptidesDictionary)
+            {
+                table.Rows.Add(protein.Key, protein.Value.Count);
+            }
 
             FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
             MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
 
             return MyTaskResults;
         }
+
     }
 }

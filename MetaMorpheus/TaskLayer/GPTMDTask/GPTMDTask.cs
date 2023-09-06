@@ -12,6 +12,7 @@ using System.Linq;
 using UsefulProteomicsDatabases;
 using Proteomics.ProteolyticDigestion;
 using System.Globalization;
+using System.Data;
 
 namespace TaskLayer
 {
@@ -159,8 +160,9 @@ namespace TaskLayer
                 }
                 string outputXMLdbFullName = Path.Combine(OutputFolder, string.Join("-", databaseNames) + "GPTMD.xml");
 
-                var newModsActuallyWritten = ProteinDbWriter.WriteXmlDatabase(gptmdResults.Mods, proteinList.Where(b => !b.IsDecoy && !b.IsContaminant).ToList(), outputXMLdbFullName);
-
+                var test = proteinList.Where(b => !b.IsDecoy && !b.IsContaminant).ToList();
+                var newModsActuallyWritten = ProteinDbWriter.WriteXmlDatabase(gptmdResults.Mods, test, outputXMLdbFullName);
+                
                 FinishedWritingFile(outputXMLdbFullName, new List<string> { taskId });
 
                 MyTaskResults.NewDatabases.Add(new DbForTask(outputXMLdbFullName, false));
@@ -193,6 +195,16 @@ namespace TaskLayer
                 MyTaskResults.AddTaskSummaryText("Contaminant modifications added: " + newModsActuallyWritten.Select(b => b.Value).Sum());
                 MyTaskResults.AddTaskSummaryText("Mods types and counts:");
                 MyTaskResults.AddTaskSummaryText(string.Join(Environment.NewLine, newModsActuallyWritten.OrderByDescending(b => b.Value).Select(b => "\t" + b.Key + "\t" + b.Value)));
+            }
+
+            DataTable table = new DataTable();
+
+            table.Columns.Add("AccessionNumber", typeof(string));
+            table.Columns.Add("Features", typeof(int));
+
+            foreach (var protein in gptmdResults.Mods)
+            {
+                table.Rows.Add(protein.Key, protein.Value.Count);
             }
             return MyTaskResults;
         }

@@ -824,12 +824,33 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
+                @"D:\08-30-22_bottomup\uniprotkb_proteome_UP000005640_AND_revi_2023_09_05.xml",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,
                 new List<string>() {
-                    @"D:\08-30-22_bottomup\unfractionated\Task1-CalibrateTask\08-29-22_unfractionated_human_Tryp-calib.mzML" },
+                    @"D:\08-30-22_bottomup\test.mzML" },
+                dbForTask, @"D:\TestingCSTask");
+
+            runner.Run();
+        }
+
+        [Test]
+        public void GetAllAccessionNumbersAndFeaturesCSTask()
+        {
+            var taskList = new List<(string, MetaMorpheusTask)>();
+            var CSTask = new CSTask(new CommonParameters());
+
+            taskList.Add(("CS-Task", CSTask));
+
+            List<DbForTask> dbForTask = new List<DbForTask>();
+            dbForTask.Add(new DbForTask(
+                @"D:\08-30-22_bottomup\uniprotkb_proteome_UP000005640_AND_revi_2023_09_05.xml",
+                false));
+
+            var runner = new EverythingRunnerEngine(taskList,
+                new List<string>() {
+                    @"D:\08-30-22_bottomup\test.mzML" },
                 dbForTask, @"D:\TestingCSTask");
 
             runner.Run();
