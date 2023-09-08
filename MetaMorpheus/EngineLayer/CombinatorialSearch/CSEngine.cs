@@ -87,7 +87,8 @@ namespace EngineLayer.CombinatorialSearch
 
             lock (modsUsedDictionary)
             {
-                Parallel.ForEach(Psms, psm =>
+                foreach(var psm in Psms)
+                //Parallel.ForEach(Psms, psm =>
                 {
 
                     Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
@@ -102,10 +103,12 @@ namespace EngineLayer.CombinatorialSearch
                             new DigestionParams(), FixedMods, new List<Modification>()).ToList(); //todo use the search digestionparams
 
                         var peptideForDeltaSearchProteinBuild =
-                            peptidesResultingFromDigestedProtein.Find(x => x.BaseSequence.Equals(psm.BaseSequence));
+                            peptidesResultingFromDigestedProtein.Find(x => x.BaseSequence
+                                .Equals(psm.BaseSequence));
 
 
-                        var peptideForModifications = new Protein(peptideForDeltaSearchProteinBuild.BaseSequence,
+                        var peptideForModifications = new Protein(
+                                peptideForDeltaSearchProteinBuild.BaseSequence,
                                 peptideForDeltaSearchProteinBuild.Protein.Accession,
                                 peptideForDeltaSearchProteinBuild.Protein.Organism,
                                 null,
@@ -117,39 +120,61 @@ namespace EngineLayer.CombinatorialSearch
                                         peptideForModifications.First().MonoisotopicMass;
 
                         var possibleMods = GetCombinationsThatFitDelta(deltaMass);
-
-                        foreach (var mod in possibleMods)
+                        if (possibleMods != null)
                         {
-                            var bestCandidate = SearchForMods(FixedMods, mod,
-                                peptideForModifications, psmAndProtein);
-
-                            if (resultsFromSearch.Count == 0)
+                            foreach (var mod in possibleMods)
                             {
-                                resultsFromSearch.Add(bestCandidate);
-                                continue;
-                            }
+                                var bestCandidate = SearchForMods(FixedMods, mod,
+                                    peptideForModifications, psmAndProtein);
 
-                            if (bestCandidate.Count == 0)
-                            {
-                                continue;
-                            }
+                                if (resultsFromSearch.Count == 0)
+                                {
+                                    resultsFromSearch.Add(bestCandidate);
+                                    continue;
+                                }
 
-                            if (!resultsFromSearch.ContainsKey(bestCandidate.Keys.First()))
-                            {
-                                resultsFromSearch.Add(bestCandidate);
-                            }
+                                if (bestCandidate.Count == 0)
+                                {
+                                    continue;
+                                }
 
+                                if (!resultsFromSearch.ContainsKey(bestCandidate.Keys.First()))
+                                {
+                                    resultsFromSearch.Add(bestCandidate);
+                                }
+
+                                if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
+                                {
+                                    foreach (var peptideWithMods in bestCandidate)
+                                    {
+                                        foreach (var modInDict in peptideWithMods.Key.AllModsOneIsNterminus)
+                                        {
+                                            modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
+                                                new Tuple<int, Modification>(
+                                                    modInDict.Key,
+                                                    modInDict.Value));
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
+                                        new HashSet<Tuple<int, Modification>>());
+                                }
+                            }
+                        }
+                        else
+                        {
                             if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
                             {
-                                foreach (var peptideWithMods in bestCandidate)
+                                foreach (var peptideWithMods in peptideForModifications)
                                 {
-                                    foreach (var modInDict in peptideWithMods.Key.AllModsOneIsNterminus)
+                                    foreach (var modInDict in peptideWithMods.AllModsOneIsNterminus)
                                     {
                                         modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
                                             new Tuple<int, Modification>(
                                                 modInDict.Key,
                                                 modInDict.Value));
-
                                     }
                                 }
                             }
@@ -159,9 +184,10 @@ namespace EngineLayer.CombinatorialSearch
                                     new HashSet<Tuple<int, Modification>>());
                             }
                         }
+
                     }
 
-                });
+                }
             }
 
             return new CSResults(this, modsUsedDictionary,
@@ -193,59 +219,55 @@ namespace EngineLayer.CombinatorialSearch
             {
                 filteredPeptides = peptidesToSearch.ToList();
             }
-            Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> tempMatchesFragmentIons = new(); //b and y fragments tuple
+            Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> tempMatchesFragmentIons = new(); 
 
-            var bProducts = new List<Product>();
-            var yProducts = new List<Product>();
+            var products = new List<Product>();
 
             foreach (var peptide in filteredPeptides)
             {
-                peptide.Fragment(DissociationType.HCD, FragmentationTerminus.N, bProducts);
-                peptide.Fragment(DissociationType.HCD, FragmentationTerminus.C, yProducts);
+                peptide.Fragment(DissociationType.HCD, FragmentationTerminus.Both, products);
 
-                var bMatch = MetaMorpheusEngine.MatchFragmentIons(
+                var match = MetaMorpheusEngine.MatchFragmentIons(
                     new Ms2ScanWithSpecificMass(psmAndProtein.Item1.MsDataScan, psmAndProtein.Item1.ScanPrecursorMonoisotopicPeakMz,
                         psmAndProtein.Item1.ScanPrecursorCharge, psmAndProtein.Item1.FullFilePath,
-                        new CommonParameters()), bProducts, new CommonParameters());
-
-                var yMatch = MetaMorpheusEngine.MatchFragmentIons(
-                    new Ms2ScanWithSpecificMass(psmAndProtein.Item1.MsDataScan, psmAndProtein.Item1.ScanPrecursorMonoisotopicPeakMz,
-                        psmAndProtein.Item1.ScanPrecursorCharge, psmAndProtein.Item1.FullFilePath,
-                        new CommonParameters()), yProducts, new CommonParameters());
+                        new CommonParameters()), products, new CommonParameters());
+                
 
                 if (!tempMatchesFragmentIons.ContainsKey(peptide))
-                    tempMatchesFragmentIons.Add(peptide, new Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>(bMatch, yMatch));
+                    tempMatchesFragmentIons.Add(peptide, match);
             }
 
             //Get rid of zero matching on either side
-            var tempMatchesFragmentIonsWithoutZeros =
-                tempMatchesFragmentIons.Where(x => x.Value.Item1.Count > 0 && x.Value.Item2.Count > 0);
+            var tempMatchesFragmentIonsWithoutZeros = tempMatchesFragmentIons
+                    .Where(x => x.Value.Count > 0);
 
             if (tempMatchesFragmentIonsWithoutZeros.Count() == 0)
                 return new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
             var goodMatches = AddNonCandidatesToModsToIgnore(tempMatchesFragmentIonsWithoutZeros);
 
-            var resultsBByDescending = goodMatches.OrderByDescending(x => x.Value.Item1.Count);
-            var resultsYByDescending = goodMatches.OrderByDescending(x => x.Value.Item2.Count);
+            var resultsDescending = goodMatches
+                .OrderByDescending(x => x.Value.Count);
 
 
-            var bestModsFromResultsBandY = resultsYByDescending.First().Key.AllModsOneIsNterminus;
-            foreach (var combo in resultsYByDescending.First().Key.AllModsOneIsNterminus)
+            var bestModsFromResultsBandY = resultsDescending.First().Key.AllModsOneIsNterminus;
+
+            foreach (var combo in resultsDescending.First().Key.AllModsOneIsNterminus)
             {
                 if (!bestModsFromResultsBandY.ContainsKey(combo.Key))
                     bestModsFromResultsBandY.Add(combo.Key, combo.Value);
             }
 
-            return GetBestPeptideMatch(bestModsFromResultsBandY, goodMatches.Select(x => x.Key), 
-                psmAndProtein, fixedMods);
+            return GetBestPeptideMatch(bestModsFromResultsBandY, goodMatches
+                    .Select(x => x.Key), psmAndProtein, fixedMods);
         }
         /// <summary>
         /// Filters the peptides so redundant matching is avoided.
         /// </summary>
         /// <param name="peptideWithSetModifications"></param>
         /// <returns></returns>
-        private List<PeptideWithSetModifications> FilterPeptidesWithModsToIgnore(IEnumerable<PeptideWithSetModifications> peptideWithSetModifications)
+        private List<PeptideWithSetModifications> FilterPeptidesWithModsToIgnore(
+            IEnumerable<PeptideWithSetModifications> peptideWithSetModifications)
         {
             List<PeptideWithSetModifications> filteredPeptides = new();
 
@@ -258,9 +280,9 @@ namespace EngineLayer.CombinatorialSearch
             return filteredPeptides;
         }
 
-        private Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> GetBestPeptideMatch(Dictionary<int, Modification> bestModsFromBYMatching,
-            IEnumerable<PeptideWithSetModifications> peptideWithSetModifications, Tuple<PeptideSpectralMatch, Protein> psmAndProtein,
-            List<Modification> fixedMods)
+        private Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> GetBestPeptideMatch(
+            Dictionary<int, Modification> bestModsFromBYMatching, IEnumerable<PeptideWithSetModifications> peptideWithSetModifications,
+            Tuple<PeptideSpectralMatch, Protein> psmAndProtein, List<Modification> fixedMods)
         {
             var secondRunResults = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
@@ -293,8 +315,9 @@ namespace EngineLayer.CombinatorialSearch
                 secondRunResults.Add(product, secondRunMatch);
             }
 
-            var bestMatch = secondRunResults.OrderByDescending(x =>
-                x.Value.Count).ThenByDescending(x => x.Value[0].NeutralTheoreticalProduct.FragmentNumber).First();
+            var bestMatch = secondRunResults
+                .OrderByDescending(x => x.Value.Count)
+                .ThenByDescending(x => x.Value[0].NeutralTheoreticalProduct.FragmentNumber).First();
 
             var bestMatchDict = new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
             bestMatchDict.Add(bestMatch.Key, bestMatch.Value);
@@ -307,25 +330,22 @@ namespace EngineLayer.CombinatorialSearch
         /// </summary>
         /// <param name="matchedPeptides"></param>
         /// <returns></returns>
-        private Dictionary<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>> AddNonCandidatesToModsToIgnore(
-            IEnumerable<KeyValuePair<PeptideWithSetModifications, Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>> matchedPeptides)
+        private Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> AddNonCandidatesToModsToIgnore(
+            IEnumerable<KeyValuePair<PeptideWithSetModifications, List<MatchedFragmentIon>>> matchedPeptides)
         {
             var sorted = matchedPeptides
-                .OrderBy(x => x.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber)
-                .ThenBy(x => x.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber);
+                .OrderBy(x => x.Value[0].NeutralTheoreticalProduct.FragmentNumber);
 
             var goodMatches =
-                new Dictionary<PeptideWithSetModifications,
-                    Tuple<List<MatchedFragmentIon>, List<MatchedFragmentIon>>>();
+                new Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>>();
 
             foreach (var match in sorted)
             {
-                if (match.Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item1[0].NeutralTheoreticalProduct.FragmentNumber ||
-                    match.Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber > sorted.First().Value.Item2[0].NeutralTheoreticalProduct.FragmentNumber)
+                if (match.Value[0].NeutralTheoreticalProduct.FragmentNumber < sorted.First().Value[0].NeutralTheoreticalProduct.FragmentNumber)
                 {
                     ModsToIgnore.Add(match.Key.AllModsOneIsNterminus);
                 }
-                else if (match.Value.Item1.Count >= sorted.First().Value.Item1.Count || match.Value.Item2.Count >= sorted.First().Value.Item2.Count)
+                else if (match.Value.Count >= sorted.First().Value.Count)
                 {
                     if (!goodMatches.Keys.Contains(match.Key))
                         goodMatches.Add(match.Key, match.Value);
@@ -342,7 +362,7 @@ namespace EngineLayer.CombinatorialSearch
         /// <returns></returns>
         public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(800);
+            var tolerance = new PpmTolerance(500);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 
@@ -360,7 +380,8 @@ namespace EngineLayer.CombinatorialSearch
             if (rangeIndex.Length == 0)
                 rangeIndex = new[] { maxIndex };
 
-            var rangeOfPossibleMods = rangeIndex.Select(x => CombinationOfModifications[x]);
+            var rangeOfPossibleMods = rangeIndex
+                .Select(x => CombinationOfModifications[x]);
 
             return rangeOfPossibleMods.ToList();
         }

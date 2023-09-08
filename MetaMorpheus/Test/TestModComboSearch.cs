@@ -824,15 +824,48 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\08-30-22_bottomup\uniprotkb_proteome_UP000005640_AND_revi_2023_09_05.xml",
+                @"D:\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,
-                new List<string>() {
-                    @"D:\08-30-22_bottomup\test.mzML" },
+                new List<string>()
+                {
+                    @"D:\08-30-22_bottomup\test.mzML"
+                },
                 dbForTask, @"D:\TestingCSTask");
 
             runner.Run();
+
+            var xmlProteins = UsefulProteomicsDatabases.ProteinDbLoader.LoadProteinXML(
+                @"D:\TestingCSTask\testingTasks.xml", true, DecoyType.None,
+                GlobalVariables.AllModsKnown.OfType<Modification>()
+                    .Where(mod =>
+                        mod.ModificationType.Contains("Common Biological") ||
+                        mod.ModificationType.Contains("Common Artifact") ||
+                        mod.ModificationType.Contains("Less Common") ||
+                        mod.ModificationType.Contains("Metals") ||
+                        mod.ModificationType.Contains("UniProt")), false, new[] { "null" }, out _);
+
+            var proteinsWithMods = xmlProteins.Where(x => x.OneBasedPossibleLocalizedModifications.Count > 0).ToList()
+                .OrderByDescending(x => x.OneBasedPossibleLocalizedModifications.Count);
+
+        }
+
+        [Test]
+        public void LOAD_XML()
+        {
+            var xmlProteins = UsefulProteomicsDatabases.ProteinDbLoader.LoadProteinXML(
+                @"D:\TestingCSTask\testingTasks.xml", true, DecoyType.None,
+                GlobalVariables.AllModsKnown.OfType<Modification>()
+                    .Where(mod =>
+                        mod.ModificationType.Contains("Common Biological") ||
+                        mod.ModificationType.Contains("Common Artifact") ||
+                        mod.ModificationType.Contains("Less Common") ||
+                        mod.ModificationType.Contains("Metals") ||
+                        mod.ModificationType.Contains("UniProt")), false, new[] { "null" }, out _);
+
+            var proteinsWithMods = xmlProteins.Where(x => x.OneBasedPossibleLocalizedModifications.Count > 0).ToList()
+                .OrderByDescending(x => x.OneBasedPossibleLocalizedModifications.Count);
         }
 
         [Test]

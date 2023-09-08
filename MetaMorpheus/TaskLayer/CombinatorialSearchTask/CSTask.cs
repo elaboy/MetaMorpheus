@@ -19,6 +19,8 @@ namespace TaskLayer.CombinatorialSearchTask
 {
     public class CSTask : MetaMorpheusTask
     {
+        private Dictionary<string, int> XMLThing { get; set; }
+
         public CSTask(CommonParameters commonParameters) : base(MyTask.CombinatorialSearch)
         {
             CommonParameters = commonParameters;
@@ -41,9 +43,9 @@ namespace TaskLayer.CombinatorialSearchTask
                 .Where(mod =>
                     mod.ModificationType.Contains("Common Biological") ||
                     mod.ModificationType.Contains("Common Artifact") ||
-                    mod.ModificationType.Contains("Less Common") ||
-                    mod.ModificationType.Contains("Metals") ||
-                    mod.ModificationType.Contains("UniProt")).ToList();
+                    mod.ModificationType.Contains("Less Common")).ToList(); //||
+                    //mod.ModificationType.Contains("Metals") ||
+                    //mod.ModificationType.Contains("UniProt")).ToList();
 
             var psms = CSEngine.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv"); //not being used rn
 
@@ -83,28 +85,29 @@ namespace TaskLayer.CombinatorialSearchTask
             //    new List<string>() { "Combinatorial-Search" });
 
             MyFileManager myFileManager = new MyFileManager(true);
-            //lock (allPsms)
-            //{
-                for (int i = 0; i < currentRawFileList.Count; i++)
-                //Parallel.For(0, currentRawFileList.Count, i=>
+            lock (allPsms)
+            {
+                //for (int i = 0; i < currentRawFileList.Count; i++)
+                Parallel.For(0, currentRawFileList.Count, i =>
                 {
                     var dataFileName = currentRawFileList[i];
 
                     CommonParameters combinedParams =
                         SetAllFileSpecificCommonParams(CommonParameters, fileSettingsList[i]);
 
-                    MassDiffAcceptor searchMode = new DotMassDiffAcceptor("", 
+                    MassDiffAcceptor searchMode = new DotMassDiffAcceptor("",
                         commonBiologicalMods.Select(x => x.MonoisotopicMass.Value).Distinct(),
                         combinedParams.PrecursorMassTolerance);
 
                     NewCollection(Path.GetFileName(dataFileName),
                         new List<string> { taskId, "Individual Spectra Files", dataFileName });
                     MsDataFile myDataFile = myFileManager.LoadFile(dataFileName, combinedParams);
-                    Ms2ScanWithSpecificMass[] arrayOfMs2ScansSortedByMass = GetMs2Scans(myDataFile, dataFileName, combinedParams)
+                    Ms2ScanWithSpecificMass[] arrayOfMs2ScansSortedByMass =
+                        GetMs2Scans(myDataFile, dataFileName, combinedParams)
                             .OrderBy(x => x.PrecursorMass).ToArray();
 
                     myFileManager.DoneWithFile(dataFileName);
-                    
+
                     PeptideSpectralMatch[] allPsmsArray = new PeptideSpectralMatch[arrayOfMs2ScansSortedByMass.Length];
 
                     // search
@@ -117,17 +120,18 @@ namespace TaskLayer.CombinatorialSearchTask
                     allPsms.AddRange(allPsmsArray.Where(x => x != null));
                     FinishedDataFile(dataFileName,
                         new List<string>() { taskId, "Individual Spectra Files", dataFileName });
-                }
+                });
 
-            //}
+            }
 
-            allPsms = allPsms.OrderByDescending(b => b.Score)
+            allPsms = allPsms
+                .OrderByDescending(b => b.Score)
                 .ThenBy(b => b.PeptideMonisotopicMass.HasValue ? Math.Abs(b.ScanPrecursorMass - b.PeptideMonisotopicMass.Value) : double.MaxValue)
                 .GroupBy(b => new Tuple<string, int, double?>(b.FullFilePath, b.ScanNumber, b.PeptideMonisotopicMass))
                 .Select(b => b.First()).ToList();
 
-            MassDiffAcceptor searchModeTemp = new DotMassDiffAcceptor("", commonBiologicalMods.Select(x => x.MonoisotopicMass.Value),
-                CommonParameters.PrecursorMassTolerance);
+            MassDiffAcceptor searchModeTemp = new DotMassDiffAcceptor("", commonBiologicalMods
+                    .Select(x => x.MonoisotopicMass.Value), CommonParameters.PrecursorMassTolerance);
 
             new FdrAnalysisEngine(allPsms, searchModeTemp.NumNotches, CommonParameters,
                 this.FileSpecificParameters, new List<string>() { taskId });
@@ -138,7 +142,8 @@ namespace TaskLayer.CombinatorialSearchTask
             // CS stuff 
 
 
-            var engine = new CSEngine(allPsms.Where(x => x.IsDecoy == false), proteinList,
+            var engine = new CSEngine(allPsms
+                    .Where(x => x.IsDecoy == false), proteinList, 
                 listOfModCombinations, combinationsWithAddedMass, fixedMods,
                 new CommonParameters(), fileSpecificParameters,
                 new List<string>() { "Combinatorial-Search" });
@@ -150,15 +155,17 @@ namespace TaskLayer.CombinatorialSearchTask
             var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
                 proteinList, @"D:\TestingCSTask\testingTasks.xml");
 
-            DataTable table = new DataTable();
+            XMLThing = xmlDatabase;
 
-            table.Columns.Add("AccessionNumber", typeof(string));
-            table.Columns.Add("Features", typeof(int));
+            //DataTable table = new DataTable();
 
-            foreach (var protein in csResults.matchedPeptidesDictionary)
-            {
-                table.Rows.Add(protein.Key, protein.Value.Count);
-            }
+            //table.Columns.Add("AccessionNumber", typeof(string));
+            //table.Columns.Add("Features", typeof(int));
+
+            //foreach (var protein in csResults.matchedPeptidesDictionary)
+            //{
+            //    table.Rows.Add(protein.Key, protein.Value.Count);
+            //}
 
             FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
             MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
