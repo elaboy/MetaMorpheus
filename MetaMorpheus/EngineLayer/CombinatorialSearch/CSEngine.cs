@@ -9,8 +9,11 @@ using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using MzLibUtil;
 using System.IO;
+using System.Net.WebSockets;
 using FlashLFQ;
 using Microsoft.ML.Transforms;
+using OxyPlot;
+using Readers;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -41,7 +44,8 @@ namespace EngineLayer.CombinatorialSearch
         public CSEngine(IEnumerable<PeptideSpectralMatch> peptideSpectralMatches, List<Protein> listOfProteins,
             List<List<Modification>> listOfModCombos,
             List<KeyValuePair<double, Modification[]>> numberOfVariableMods, List<Modification> fixedMods,
-            CommonParameters commonParameters, List<(string FileName, CommonParameters Parameters)> fileSpecificParameters,
+            CommonParameters commonParameters,
+            List<(string FileName, CommonParameters Parameters)> fileSpecificParameters,
             List<string> nestedIds)
             : base(commonParameters, fileSpecificParameters, nestedIds)
         {
@@ -81,17 +85,20 @@ namespace EngineLayer.CombinatorialSearch
                     double.Parse(psm.Score), int.Parse(psm.Charge)));
             }
         }
+
         protected override MetaMorpheusEngineResults RunSpecific()
         {
             Dictionary<string, HashSet<Tuple<int, Modification>>> modsUsedDictionary = new();
 
             lock (modsUsedDictionary)
             {
-                foreach(var psm in Psms)
-                //Parallel.ForEach(Psms, psm =>
+                //foreach (var psm in Psms)
+                Parallel.ForEach(Psms.Where(x => x.IsDecoy is false), psm =>
                 {
 
-                    Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
+                    List<(PeptideWithSetModifications, List<MatchedFragmentIon>)> resultsFromSearch = new();
+
+                    List<Product> products = new List<Product>();
 
                     Tuple<PeptideSpectralMatch, Protein> psmAndProtein = new Tuple<PeptideSpectralMatch, Protein>(
                         psm, ProteinList.Find(x =>
@@ -100,99 +107,108 @@ namespace EngineLayer.CombinatorialSearch
                     if (psmAndProtein.Item2 != null)
                     {
                         var peptidesResultingFromDigestedProtein = psmAndProtein.Item2.Digest(
-                            new DigestionParams(), FixedMods, new List<Modification>()).ToList(); //todo use the search digestionparams
+                                new DigestionParams(), FixedMods, new List<Modification>())
+                            .ToList(); //todo use the search digestionparams
 
                         var peptideForDeltaSearchProteinBuild =
                             peptidesResultingFromDigestedProtein.Find(x => x.BaseSequence
                                 .Equals(psm.BaseSequence));
 
 
-                        var peptideForModifications = new Protein(
-                                peptideForDeltaSearchProteinBuild.BaseSequence,
-                                peptideForDeltaSearchProteinBuild.Protein.Accession,
-                                peptideForDeltaSearchProteinBuild.Protein.Organism,
-                                null,
-                                peptideForDeltaSearchProteinBuild.Protein.OneBasedPossibleLocalizedModifications)
-                            .Digest(new DigestionParams("top-down", 0), FixedMods,
-                                new List<Modification>());
+                        //var peptideForModifications = new Protein(
+                        //        peptideForDeltaSearchProteinBuild.BaseSequence,
+                        //        peptideForDeltaSearchProteinBuild.Protein.Accession,
+                        //        peptideForDeltaSearchProteinBuild.Protein.Organism,
+                        //        null,
+                        //        peptideForDeltaSearchProteinBuild.Protein.OneBasedPossibleLocalizedModifications)
+                        //    .Digest(new DigestionParams(), FixedMods,
+                        //        new List<Modification>());
 
                         var deltaMass = psmAndProtein.Item1.ScanPrecursorMass -
-                                        peptideForModifications.First().MonoisotopicMass;
+                                        peptideForDeltaSearchProteinBuild.MonoisotopicMass;
 
                         var possibleMods = GetCombinationsThatFitDelta(deltaMass);
                         if (possibleMods != null)
                         {
                             foreach (var mod in possibleMods)
                             {
-                                var bestCandidate = SearchForMods(FixedMods, mod,
-                                    peptideForModifications, psmAndProtein);
+                                var peptideAsProtrein = psmAndProtein.Item2
+                                    .Digest(new DigestionParams(), FixedMods,
+                                        mod).ToList()
+                                    .FindAll(x => x.BaseSequence
+                                        .Equals(psm.BaseSequence));
 
-                                if (resultsFromSearch.Count == 0)
+                                foreach (var peptide in peptideAsProtrein)
                                 {
-                                    resultsFromSearch.Add(bestCandidate);
-                                    continue;
-                                }
 
-                                if (bestCandidate.Count == 0)
-                                {
-                                    continue;
-                                }
+                                    peptide.Fragment(DissociationType.HCD, FragmentationTerminus.Both, products);
 
-                                if (!resultsFromSearch.ContainsKey(bestCandidate.Keys.First()))
-                                {
-                                    resultsFromSearch.Add(bestCandidate);
-                                }
+                                    var match = MatchFragmentIons(
+                                        new Ms2ScanWithSpecificMass(psmAndProtein.Item1.MsDataScan,
+                                            psmAndProtein.Item1.ScanPrecursorMonoisotopicPeakMz,
+                                            psmAndProtein.Item1.ScanPrecursorCharge,
+                                            psmAndProtein.Item1.FullFilePath,
+                                            new CommonParameters()),
+                                        products, new CommonParameters());
 
-                                if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
-                                {
-                                    foreach (var peptideWithMods in bestCandidate)
+                                    resultsFromSearch.Add((peptide, match));
+
+                                    var startingPosition = peptide.OneBasedStartResidueInProtein;
+
+                                    foreach (var moddedPeptide in peptide.AllModsOneIsNterminus)
                                     {
-                                        foreach (var modInDict in peptideWithMods.Key.AllModsOneIsNterminus)
+                                        if (!modsUsedDictionary.ContainsKey(peptide.Protein.Accession))
                                         {
-                                            modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
-                                                new Tuple<int, Modification>(
-                                                    modInDict.Key,
-                                                    modInDict.Value));
+                                            modsUsedDictionary.Add(peptide.Protein.Accession,
+                                                new HashSet<Tuple<int, Modification>>()
+                                                {
+                                                    new Tuple<int, Modification>(moddedPeptide.Key + startingPosition, moddedPeptide.Value),
+                                                });
+                                        }
+                                        else
+                                        {
+                                            modsUsedDictionary[peptide.Protein.Accession].Add(
+                                                new Tuple<int, Modification>(moddedPeptide.Key + startingPosition, moddedPeptide.Value));
                                         }
                                     }
+
                                 }
-                                else
-                                {
-                                    modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
-                                        new HashSet<Tuple<int, Modification>>());
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
-                            {
-                                foreach (var peptideWithMods in peptideForModifications)
-                                {
-                                    foreach (var modInDict in peptideWithMods.AllModsOneIsNterminus)
-                                    {
-                                        modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
-                                            new Tuple<int, Modification>(
-                                                modInDict.Key,
-                                                modInDict.Value));
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
-                                    new HashSet<Tuple<int, Modification>>());
                             }
                         }
 
                     }
-
-                }
+                });
             }
+        
+    
+    //foreach (var peptide in resultsFromSearch)
+                    //{
+                    //    if (peptide.Item1 is not null)
+                    //    {
+                    //        foreach (var mod in peptide.Item1.AllModsOneIsNterminus)
+                    //        {
+                    //            if (!modsUsedDictionary.ContainsKey(peptide.Item1.Protein.Accession))
+                    //            {
+                    //                modsUsedDictionary.Add(peptide.Item1.Protein.Accession,
+                    //                    new HashSet<Tuple<int, Modification>>()
+                    //                    {
+                    //                        new Tuple<int, Modification>(mod.Key + peptide.Item1.OneBasedStartResidueInProtein, mod.Value),
+                    //                    });
+                    //            }
+                    //            else
+                    //            {
+                    //                modsUsedDictionary[peptide.Item1.Protein.Accession].Add(
+                    //                    new Tuple<int, Modification>(mod.Key + peptide.Item1.OneBasedStartResidueInProtein, mod.Value));
+                    //            }
+                    //        }
+                    //    }
+                    //}
+            //    });
+            //}
 
             return new CSResults(this, modsUsedDictionary,
                 CombinationOfModifications.SelectMany(x => x).ToList(),
-                ProteinList);
+                ProteinList.Where(x => x.IsDecoy is false).ToList());
         }
 
         /// <summary>
@@ -362,7 +378,7 @@ namespace EngineLayer.CombinatorialSearch
         /// <returns></returns>
         public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(500);
+            var tolerance = new PpmTolerance(50);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 
@@ -466,3 +482,71 @@ namespace EngineLayer.CombinatorialSearch
         }
     }
 }
+
+
+
+
+
+
+                            //    foreach (var mod in possibleMods)
+                            //    {
+                            //        var bestCandidate = SearchForMods(FixedMods, mod,
+                            //            peptideForModifications, psmAndProtein);
+
+//        if (resultsFromSearch.Count == 0)
+//        {
+//            resultsFromSearch.Add(bestCandidate);
+//            continue;
+//        }
+
+//        if (bestCandidate.Count == 0)
+//        {
+//            continue;
+//        }
+
+//        if (!resultsFromSearch.ContainsKey(bestCandidate.Keys.First()))
+//        {
+//            resultsFromSearch.Add(bestCandidate);
+//        }
+
+//        if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
+//        {
+//            foreach (var peptideWithMods in bestCandidate)
+//            {
+//                foreach (var modInDict in peptideWithMods.Key.AllModsOneIsNterminus)
+//                {
+//                    modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
+//                        new Tuple<int, Modification>(
+//                            modInDict.Key,
+//                            modInDict.Value));
+//                }
+//            }
+//        }
+//        else
+//        {
+//            modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
+//                new HashSet<Tuple<int, Modification>>());
+//        }
+//    }
+//}
+//else
+//{
+//    if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
+//    {
+//        foreach (var peptideWithMods in peptideForModifications)
+//        {
+//            foreach (var modInDict in peptideWithMods.AllModsOneIsNterminus)
+//            {
+//                modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
+//                    new Tuple<int, Modification>(
+//                        modInDict.Key,
+//                        modInDict.Value));
+//            }
+//        }
+//    }
+//    else
+//    {
+//        modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
+//            new HashSet<Tuple<int, Modification>>());
+//    }
+//}

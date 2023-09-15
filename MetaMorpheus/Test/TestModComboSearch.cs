@@ -844,7 +844,8 @@ namespace Test
                         mod.ModificationType.Contains("Common Artifact") ||
                         mod.ModificationType.Contains("Less Common") ||
                         mod.ModificationType.Contains("Metals") ||
-                        mod.ModificationType.Contains("UniProt")), false, new[] { "null" }, out _);
+                        mod.ModificationType.Contains("UniProt")),
+                false, new[] { "null" }, out _);
 
             var proteinsWithMods = xmlProteins.Where(x => x.OneBasedPossibleLocalizedModifications.Count > 0).ToList()
                 .OrderByDescending(x => x.OneBasedPossibleLocalizedModifications.Count);

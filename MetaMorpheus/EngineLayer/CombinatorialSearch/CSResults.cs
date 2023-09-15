@@ -30,13 +30,13 @@ namespace EngineLayer.CombinatorialSearch
         {
             var sb = new StringBuilder();
             sb.AppendLine(base.ToString());
-            sb.AppendLine("Proteins trying to expand: " + ListOfProteins.Count);
+            sb.AppendLine("Proteins trying to expand: " + matchedPeptidesDictionary.Count);
             sb.AppendLine("Mods types and counts:");
             sb.AppendLine(string.Join(Environment.NewLine, matchedPeptidesDictionary
-                    .SelectMany(b => b.Value)
-                    .GroupBy(b => b.Item2)
-                    .OrderBy(b => -b.Count())
-                    .Select(b => "\t" + b.Key.IdWithMotif + "\t" + b.Count())));
+                .SelectMany(b => b.Value)));
+                    //.GroupBy(b => b.Item2)
+                    //.OrderBy(b => -b.Count())
+                    //.Select(b => "\t" + b.Key.IdWithMotif + "\t" + b.Count())));
 
             return sb.ToString();
         }

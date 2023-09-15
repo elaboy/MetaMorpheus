@@ -25,6 +25,7 @@
     <PackageReference Include="NETStandard.Library" Version="2.0.3" />
     <PackageReference Include="Nett" Version="0.15.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="OxyPlot.Core" Version="2.0.0" />
     <PackageReference Include="TopDownProteomics" Version="0.0.290" />
     <PackageReference Include="TorchSharp-cuda-windows" Version="0.100.3" />
   </ItemGroup>

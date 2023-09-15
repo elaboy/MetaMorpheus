@@ -41,11 +41,11 @@ namespace TaskLayer.CombinatorialSearchTask
 
             List<Modification> commonBiologicalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
                 .Where(mod =>
-                    mod.ModificationType.Contains("Common Biological") ||
-                    mod.ModificationType.Contains("Common Artifact") ||
-                    mod.ModificationType.Contains("Less Common")).ToList(); //||
+                    //mod.ModificationType.Contains("Common Biological") ||
+                    //mod.ModificationType.Contains("Common Artifact") ||
+                    //mod.ModificationType.Contains("Less Common") ||
                     //mod.ModificationType.Contains("Metals") ||
-                    //mod.ModificationType.Contains("UniProt")).ToList();
+                    mod.ModificationType.Contains("UniProt")).ToList();
 
             var psms = CSEngine.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv"); //not being used rn
 
@@ -153,7 +153,7 @@ namespace TaskLayer.CombinatorialSearchTask
             // output results
             //var writtenModsIntoDB = ProteinDbWriter.WriteXmlDatabase()
             var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
-                proteinList, @"D:\TestingCSTask\testingTasks.xml");
+                proteinList.Where(x => x.IsDecoy is false).ToList(), @"D:\TestingCSTask\testingTasks.xml");
 
             XMLThing = xmlDatabase;
 
