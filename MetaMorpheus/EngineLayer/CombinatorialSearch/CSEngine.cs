@@ -87,8 +87,8 @@ namespace EngineLayer.CombinatorialSearch
 
             lock (modsUsedDictionary) //todo change this lock into the object array format shortreed showed me
             {
-                //foreach(var psm in Psms)
-                Parallel.ForEach(Psms, psm =>
+                foreach (var psm in Psms)
+                //Parallel.ForEach(Psms, psm =>
                 {
 
                     Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
@@ -101,7 +101,7 @@ namespace EngineLayer.CombinatorialSearch
                     {
                         var peptidesResultingFromDigestedProtein = psmAndProtein.Item2.Digest(
                                 new DigestionParams(), FixedMods, new List<Modification>())
-                            .ToList(); //todo use the search digestionparams
+                            .ToList(); //todo use the search digestion params
 
                         var peptideForDeltaSearchProteinBuild =
                             peptidesResultingFromDigestedProtein.Find(x => x.BaseSequence
@@ -135,14 +135,10 @@ namespace EngineLayer.CombinatorialSearch
                                 }
 
                                 if (bestCandidate.Count == 0)
-                                {
                                     continue;
-                                }
 
                                 if (!resultsFromSearch.ContainsKey(bestCandidate.Keys.First()))
-                                {
                                     resultsFromSearch.Add(bestCandidate);
-                                }
 
                                 if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
                                 {
@@ -182,15 +178,13 @@ namespace EngineLayer.CombinatorialSearch
                                 }
                             }
                             else
-                            {
                                 modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
                                     new HashSet<Tuple<int, Modification>>());
-                            }
                         }
 
                     }
 
-                });
+                }
             }
 
             return new CSResults(this, modsUsedDictionary,
