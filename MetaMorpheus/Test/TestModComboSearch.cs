@@ -837,7 +837,7 @@ namespace Test
             runner.Run();
 
             var xmlProteins = UsefulProteomicsDatabases.ProteinDbLoader.LoadProteinXML(
-                @"D:\TestingCSTask\testingTasks.xml", true, DecoyType.None,
+                @"D:\08-29-22_unfractionated_human_Tryp_TestingCSSearch\08-29-22_unfractionated_human_Tryp.xml", true, DecoyType.None,
                 GlobalVariables.AllModsKnown.OfType<Modification>()
                     .Where(mod =>
                         mod.ModificationType.Contains("Common Biological") ||

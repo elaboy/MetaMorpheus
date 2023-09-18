@@ -85,10 +85,10 @@ namespace EngineLayer.CombinatorialSearch
         {
             Dictionary<string, HashSet<Tuple<int, Modification>>> modsUsedDictionary = new();
 
-            lock (modsUsedDictionary)
+            lock (modsUsedDictionary) //todo change this lock into the object array format shortreed showed me
             {
-                foreach(var psm in Psms)
-                //Parallel.ForEach(Psms, psm =>
+                //foreach(var psm in Psms)
+                Parallel.ForEach(Psms, psm =>
                 {
 
                     Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
@@ -100,7 +100,8 @@ namespace EngineLayer.CombinatorialSearch
                     if (psmAndProtein.Item2 != null)
                     {
                         var peptidesResultingFromDigestedProtein = psmAndProtein.Item2.Digest(
-                            new DigestionParams(), FixedMods, new List<Modification>()).ToList(); //todo use the search digestionparams
+                                new DigestionParams(), FixedMods, new List<Modification>())
+                            .ToList(); //todo use the search digestionparams
 
                         var peptideForDeltaSearchProteinBuild =
                             peptidesResultingFromDigestedProtein.Find(x => x.BaseSequence
@@ -113,7 +114,7 @@ namespace EngineLayer.CombinatorialSearch
                                 peptideForDeltaSearchProteinBuild.Protein.Organism,
                                 null,
                                 peptideForDeltaSearchProteinBuild.Protein.OneBasedPossibleLocalizedModifications)
-                            .Digest(new DigestionParams("top-down", 0), FixedMods,
+                            .Digest(new DigestionParams("top-down"), FixedMods,
                                 new List<Modification>());
 
                         var deltaMass = psmAndProtein.Item1.ScanPrecursorMass -
@@ -151,7 +152,8 @@ namespace EngineLayer.CombinatorialSearch
                                         {
                                             modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
                                                 new Tuple<int, Modification>(
-                                                    modInDict.Key,
+                                                    modInDict.Key + peptideForDeltaSearchProteinBuild
+                                                        .OneBasedStartResidueInProtein,
                                                     modInDict.Value));
                                         }
                                     }
@@ -173,7 +175,8 @@ namespace EngineLayer.CombinatorialSearch
                                     {
                                         modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
                                             new Tuple<int, Modification>(
-                                                modInDict.Key,
+                                                modInDict.Key + peptideForDeltaSearchProteinBuild
+                                                    .OneBasedStartResidueInProtein,
                                                 modInDict.Value));
                                     }
                                 }
@@ -187,7 +190,7 @@ namespace EngineLayer.CombinatorialSearch
 
                     }
 
-                }
+                });
             }
 
             return new CSResults(this, modsUsedDictionary,
@@ -291,7 +294,7 @@ namespace EngineLayer.CombinatorialSearch
                     peptideWithSetModifications.First().Protein.Accession,
                     peptideWithSetModifications.First().Protein.Organism,
                     null, peptideWithSetModifications.First().Protein.OneBasedPossibleLocalizedModifications),
-                new DigestionParams("top-down", 0), 1,
+                new DigestionParams("top-down"), peptideWithSetModifications.First().OneBasedStartResidueInProtein,
                 peptideWithSetModifications.First().BaseSequence.Length,
                 CleavageSpecificity.Full, "", 0, bestModsFromBYMatching, FixedMods.Count);
 

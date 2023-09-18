@@ -43,9 +43,9 @@ namespace TaskLayer.CombinatorialSearchTask
                 .Where(mod =>
                     mod.ModificationType.Contains("Common Biological") ||
                     mod.ModificationType.Contains("Common Artifact") ||
-                    mod.ModificationType.Contains("Less Common")).ToList(); //||
-                    //mod.ModificationType.Contains("Metals") ||
-                    //mod.ModificationType.Contains("UniProt")).ToList();
+                    mod.ModificationType.Contains("Less Common") ||
+                    mod.ModificationType.Contains("Metals") ||
+                    mod.ModificationType.Contains("UniProt")).ToList();
 
             var psms = CSEngine.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv"); //not being used rn
 
@@ -85,44 +85,41 @@ namespace TaskLayer.CombinatorialSearchTask
             //    new List<string>() { "Combinatorial-Search" });
 
             MyFileManager myFileManager = new MyFileManager(true);
-            lock (allPsms)
+            for (int i = 0; i < currentRawFileList.Count; i++)
+            //Parallel.For(0, currentRawFileList.Count, i =>
             {
-                //for (int i = 0; i < currentRawFileList.Count; i++)
-                Parallel.For(0, currentRawFileList.Count, i =>
-                {
-                    var dataFileName = currentRawFileList[i];
+                var dataFileName = currentRawFileList[i];
 
-                    CommonParameters combinedParams =
-                        SetAllFileSpecificCommonParams(CommonParameters, fileSettingsList[i]);
+                CommonParameters combinedParams =
+                    SetAllFileSpecificCommonParams(CommonParameters, fileSettingsList[i]);
 
-                    MassDiffAcceptor searchMode = new DotMassDiffAcceptor("",
-                        commonBiologicalMods.Select(x => x.MonoisotopicMass.Value).Distinct(),
-                        combinedParams.PrecursorMassTolerance);
+                MassDiffAcceptor searchMode = new DotMassDiffAcceptor("",
+                    commonBiologicalMods.Select(x => x.MonoisotopicMass.Value).Distinct(),
+                    combinedParams.PrecursorMassTolerance);
 
-                    NewCollection(Path.GetFileName(dataFileName),
-                        new List<string> { taskId, "Individual Spectra Files", dataFileName });
-                    MsDataFile myDataFile = myFileManager.LoadFile(dataFileName, combinedParams);
-                    Ms2ScanWithSpecificMass[] arrayOfMs2ScansSortedByMass =
-                        GetMs2Scans(myDataFile, dataFileName, combinedParams)
-                            .OrderBy(x => x.PrecursorMass).ToArray();
+                NewCollection(Path.GetFileName(dataFileName),
+                    new List<string> { taskId, "Individual Spectra Files", dataFileName });
+                MsDataFile myDataFile = myFileManager.LoadFile(dataFileName, combinedParams);
+                Ms2ScanWithSpecificMass[] arrayOfMs2ScansSortedByMass =
+                    GetMs2Scans(myDataFile, dataFileName, combinedParams)
+                        .OrderBy(x => x.PrecursorMass).ToArray();
 
-                    myFileManager.DoneWithFile(dataFileName);
+                myFileManager.DoneWithFile(dataFileName);
 
-                    PeptideSpectralMatch[] allPsmsArray = new PeptideSpectralMatch[arrayOfMs2ScansSortedByMass.Length];
+                PeptideSpectralMatch[] allPsmsArray = new PeptideSpectralMatch[arrayOfMs2ScansSortedByMass.Length];
 
-                    // search
-                    new ClassicSearchEngine(allPsmsArray, arrayOfMs2ScansSortedByMass, variableModifications,
-                        fixedModifications,
-                        null, null, null,
-                        proteinList, searchMode, combinedParams, this.FileSpecificParameters, null,
-                        new List<string>() { taskId, "Individual Spectra Files", dataFileName }, false).Run();
+                // search
+                new ClassicSearchEngine(allPsmsArray, arrayOfMs2ScansSortedByMass, variableModifications,
+                    fixedModifications,
+                    null, null, null,
+                    proteinList, searchMode, combinedParams, this.FileSpecificParameters, null,
+                    new List<string>() { taskId, "Individual Spectra Files", dataFileName }, false).Run();
 
-                    allPsms.AddRange(allPsmsArray.Where(x => x != null));
-                    FinishedDataFile(dataFileName,
-                        new List<string>() { taskId, "Individual Spectra Files", dataFileName });
-                });
-
+                allPsms.AddRange(allPsmsArray.Where(x => x != null));
+                FinishedDataFile(dataFileName,
+                    new List<string>() { taskId, "Individual Spectra Files", dataFileName });
             }
+
 
             allPsms = allPsms
                 .OrderByDescending(b => b.Score)
@@ -143,29 +140,15 @@ namespace TaskLayer.CombinatorialSearchTask
 
 
             var engine = new CSEngine(allPsms
-                    .Where(x => x.IsDecoy == false), proteinList, 
+                    .Where(x => x.IsDecoy == false && x.BaseSequence is not null), proteinList, 
                 listOfModCombinations, combinationsWithAddedMass, fixedMods,
                 new CommonParameters(), fileSpecificParameters,
                 new List<string>() { "Combinatorial-Search" });
 
             var csResults = (CSResults)engine.Run();
 
-            // output results
-            //var writtenModsIntoDB = ProteinDbWriter.WriteXmlDatabase()
             var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
                 proteinList, @"D:\TestingCSTask\testingTasks.xml");
-
-            XMLThing = xmlDatabase;
-
-            //DataTable table = new DataTable();
-
-            //table.Columns.Add("AccessionNumber", typeof(string));
-            //table.Columns.Add("Features", typeof(int));
-
-            //foreach (var protein in csResults.matchedPeptidesDictionary)
-            //{
-            //    table.Rows.Add(protein.Key, protein.Value.Count);
-            //}
 
             FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
             MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
