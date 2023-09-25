@@ -815,7 +815,7 @@ namespace Test
         }
 
         [Test]
-        public void METHOD23_Unfractionated()
+        public void SmallYeastFileTest()
         {
             var taskList = new List<(string, MetaMorpheusTask)>();
             var CSTask = new CSTask(new CommonParameters());
@@ -824,20 +824,26 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
+                @"C:\Users\Edwin\Downloads\uniprotkb_AND_reviewed_true_AND_model_o_2023_09_20.fasta",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,
                 new List<string>()
                 {
-                    @"D:\08-30-22_bottomup\UnfractionatedCalibrated\Task1-CalibrateTask\08-29-22_unfractionated_human_Tryp-calib.mzML"
+                    @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\Test\TestData\SmallCalibratible_Yeast.mzML"
                 },
                 dbForTask, @"D:\TestingCSTask");
 
             runner.Run();
 
+        }
+
+        [Test]
+        public void SmallYeastFileResultsTest()
+        {
+
             var xmlProteins = UsefulProteomicsDatabases.ProteinDbLoader.LoadProteinXML(
-                @"D:\08-29-22_unfractionated_human_Tryp_TestingCSSearch\08-29-22_unfractionated_human_Tryp.xml", true, DecoyType.None,
+                @"D:\TestingCSTask\testingTasks.xml", true, DecoyType.None,
                 GlobalVariables.AllModsKnown.OfType<Modification>()
                     .Where(mod =>
                         mod.ModificationType.Contains("Common Biological") ||

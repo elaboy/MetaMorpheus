@@ -2,6 +2,7 @@
 using Proteomics;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Easy.Common.Extensions;
 using System.Threading.Tasks;
@@ -9,8 +10,12 @@ using Proteomics.Fragmentation;
 using Proteomics.ProteolyticDigestion;
 using MzLibUtil;
 using System.IO;
+using System.Reflection.Metadata.Ecma335;
 using FlashLFQ;
 using Microsoft.ML.Transforms;
+using Proteomics.AminoAcidPolymer;
+using ThermoFisher.CommonCore.Data;
+using Peptide = Proteomics.AminoAcidPolymer.Peptide;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -81,17 +86,22 @@ namespace EngineLayer.CombinatorialSearch
                     double.Parse(psm.Score), int.Parse(psm.Charge)));
             }
         }
+
         protected override MetaMorpheusEngineResults RunSpecific()
         {
             Dictionary<string, HashSet<Tuple<int, Modification>>> modsUsedDictionary = new();
 
             lock (modsUsedDictionary) //todo change this lock into the object array format shortreed showed me
             {
-                foreach (var psm in Psms)
-                //Parallel.ForEach(Psms, psm =>
+                int counter = 0;
+                //foreach (var psm in Psms)
+                Parallel.ForEach(Psms, psm =>
                 {
-
+                    counter = counter + 1;
+                    Debug.WriteLine("PSM:" + counter + "/" + Psms.Count());
                     Dictionary<PeptideWithSetModifications, List<MatchedFragmentIon>> resultsFromSearch = new();
+
+                    var modFilter = new List<Modification>();
 
                     Tuple<PeptideSpectralMatch, Protein> psmAndProtein = new Tuple<PeptideSpectralMatch, Protein>(
                         psm, ProteinList.Find(x =>
@@ -99,6 +109,11 @@ namespace EngineLayer.CombinatorialSearch
 
                     if (psmAndProtein.Item2 != null)
                     {
+                        if (!modsUsedDictionary.ContainsKey(psmAndProtein.Item1.ProteinAccession))
+                            modsUsedDictionary.Add(psmAndProtein.Item1.ProteinAccession,
+                                new HashSet<Tuple<int, Modification>>());
+
+
                         var peptidesResultingFromDigestedProtein = psmAndProtein.Item2.Digest(
                                 new DigestionParams(), FixedMods, new List<Modification>())
                             .ToList(); //todo use the search digestion params
@@ -121,71 +136,106 @@ namespace EngineLayer.CombinatorialSearch
                                         peptideForModifications.First().MonoisotopicMass;
 
                         var possibleMods = GetCombinationsThatFitDelta(deltaMass);
-                        if (possibleMods != null)
+
+                        if (possibleMods is not null)
                         {
                             foreach (var mod in possibleMods)
                             {
-                                var bestCandidate = SearchForMods(FixedMods, mod,
-                                    peptideForModifications, psmAndProtein);
-
-                                if (resultsFromSearch.Count == 0)
-                                {
-                                    resultsFromSearch.Add(bestCandidate);
+                                if (mod.Any() ==
+                                    modFilter
+                                        .Any()) //checks if there are any mods black listed in the filter, if there is, continue
                                     continue;
+
+                                var moddedPeptide = new Protein(
+                                        peptideForDeltaSearchProteinBuild.BaseSequence,
+                                        peptideForDeltaSearchProteinBuild.Protein.Accession,
+                                        peptideForDeltaSearchProteinBuild.Protein.Organism,
+                                        null,
+                                        peptideForDeltaSearchProteinBuild.Protein
+                                            .OneBasedPossibleLocalizedModifications)
+                                    .Digest(new DigestionParams("top-down"), FixedMods,
+                                        mod);
+
+                                var products = new List<Product>();
+
+                                var matchedVariants =
+                                    new List<(PeptideWithSetModifications, List<MatchedFragmentIon>,
+                                        List<MatchedFragmentIon>, List<MatchedFragmentIon>
+                                        )>(); //b matches and y matches
+
+                                foreach (var variant in moddedPeptide)
+                                {
+                                    variant.Fragment(DissociationType.HCD, FragmentationTerminus.Both, products);
+
+                                    var match = MetaMorpheusEngine.MatchFragmentIons(
+                                        new Ms2ScanWithSpecificMass(psmAndProtein.Item1.MsDataScan,
+                                            psmAndProtein.Item1.ScanPrecursorMonoisotopicPeakMz,
+                                            psmAndProtein.Item1.ScanPrecursorCharge, psmAndProtein.Item1.FullFilePath,
+                                            new CommonParameters()), products, new CommonParameters());
+
+                                    var bIons = new List<MatchedFragmentIon>();
+                                    var yIons = new List<MatchedFragmentIon>();
+
+                                    //separate matchedFragmentIons
+                                    foreach (var ion in match)
+                                    {
+                                        if (ion.NeutralTheoreticalProduct.ProductType == ProductType.b)
+                                            bIons.Add(ion);
+                                        else
+                                            yIons.Add(ion);
+                                    }
+
+                                    matchedVariants.Add((variant, match, bIons, yIons));
                                 }
 
-                                if (bestCandidate.Count == 0)
-                                    continue;
+                                var bestCandidate = new (PeptideWithSetModifications, List<MatchedFragmentIon>,
+                                    List<MatchedFragmentIon>, List<MatchedFragmentIon>)[1];
 
-                                if (!resultsFromSearch.ContainsKey(bestCandidate.Keys.First()))
-                                    resultsFromSearch.Add(bestCandidate);
+                                matchedVariants = matchedVariants.Where(x => x.Item3.Count() > 0 && x.Item4.Count() > 0)
+                                    .ToList();
 
-                                if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
+                                if (matchedVariants.Count() > 1)
                                 {
-                                    foreach (var peptideWithMods in bestCandidate)
+                                    //Add to the modFilter for this PSM todo
+                                    matchedVariants = matchedVariants.OrderByDescending(x => x.Item2).ToList();
+                                    var bestMatch = matchedVariants.First();
+                                    matchedVariants.Remove(bestMatch);
+
+
+                                    if (bestMatch.Item1.AllModsOneIsNterminus.Count > 0)
                                     {
-                                        foreach (var modInDict in peptideWithMods.Key.AllModsOneIsNterminus)
+
+                                        foreach (var modification in bestMatch.Item1.AllModsOneIsNterminus)
                                         {
-                                            modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
-                                                new Tuple<int, Modification>(
-                                                    modInDict.Key + peptideForDeltaSearchProteinBuild
-                                                        .OneBasedStartResidueInProtein,
-                                                    modInDict.Value));
+                                            modsUsedDictionary[psm.ProteinAccession].Add(new Tuple<int, Modification>(modification.Key + psmAndProtein.Item1.OneBasedStartResidueInProtein.Value, modification.Value));
                                         }
                                     }
-                                }
-                                else
-                                {
-                                    modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
-                                        new HashSet<Tuple<int, Modification>>());
-                                }
-                            }
-                        }
-                        else
-                        {
-                            if (modsUsedDictionary.ContainsKey(peptideForModifications.First().Protein.Accession))
-                            {
-                                foreach (var peptideWithMods in peptideForModifications)
-                                {
-                                    foreach (var modInDict in peptideWithMods.AllModsOneIsNterminus)
+
+                                    foreach(var variants in matchedVariants)
                                     {
-                                        modsUsedDictionary[peptideForModifications.First().Protein.Accession].Add(
-                                            new Tuple<int, Modification>(
-                                                modInDict.Key + peptideForDeltaSearchProteinBuild
-                                                    .OneBasedStartResidueInProtein,
-                                                modInDict.Value));
+                                        if(variants.Item1.AllModsOneIsNterminus.Count() > 0)
+                                            modFilter.Add(variants.Item1.AllModsOneIsNterminus.First().Value);
+
+                                    //foreach (var variant in matchedVariants)
+                                    //{
+                                    //    foreach (var modification in variant.Item1.AllModsOneIsNterminus)
+                                    //    {
+                                    //        modsUsedDictionary[psm.ProteinAccession]
+                                    //            .Add(new Tuple<int, Modification>(
+                                    //                modification.Key + psmAndProtein.Item1.OneBasedStartResidueInProtein
+                                    //                    .Value,
+                                    //                modification.Value));
+                                    //    }
+
                                     }
                                 }
                             }
-                            else
-                                modsUsedDictionary.Add(peptideForModifications.First().Protein.Accession,
-                                    new HashSet<Tuple<int, Modification>>());
                         }
-
                     }
-
-                }
+                });
             }
+        
+
 
             return new CSResults(this, modsUsedDictionary,
                 CombinationOfModifications.SelectMany(x => x).ToList(),

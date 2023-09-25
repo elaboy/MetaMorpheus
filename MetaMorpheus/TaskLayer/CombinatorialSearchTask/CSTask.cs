@@ -42,12 +42,12 @@ namespace TaskLayer.CombinatorialSearchTask
             List<Modification> commonBiologicalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
                 .Where(mod =>
                     mod.ModificationType.Contains("Common Biological") ||
-                    mod.ModificationType.Contains("Common Artifact") ||
-                    mod.ModificationType.Contains("Less Common") ||
-                    mod.ModificationType.Contains("Metals") ||
+                    //mod.ModificationType.Contains("Common Artifact") ||
+                    //mod.ModificationType.Contains("Less Common") ||
+                    //mod.ModificationType.Contains("Metals") ||
                     mod.ModificationType.Contains("UniProt")).ToList();
 
-            var psms = CSEngine.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv"); //not being used rn
+            //var psms = CSEngine.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv"); //not being used rn
 
             //var dataFile = Readers.MsDataFileReader.GetDataFile(@"D:\08-30-22_bottomup\test.mzML");
             List<(string, CommonParameters)> fileSpecificParameters = new();
@@ -147,7 +147,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
             var csResults = (CSResults)engine.Run();
 
-            var xmlDatabase = ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
+            ProteinDbWriter.WriteXmlDatabase(csResults.matchedPeptidesDictionary,
                 proteinList, @"D:\TestingCSTask\testingTasks.xml");
 
             FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
