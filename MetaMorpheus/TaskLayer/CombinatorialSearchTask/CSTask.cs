@@ -42,9 +42,9 @@ namespace TaskLayer.CombinatorialSearchTask
             List<Modification> commonBiologicalMods = GlobalVariables.AllModsKnown.OfType<Modification>()
                 .Where(mod =>
                     mod.ModificationType.Contains("Common Biological") ||
-                    //mod.ModificationType.Contains("Common Artifact") ||
-                    //mod.ModificationType.Contains("Less Common") ||
-                    //mod.ModificationType.Contains("Metals") ||
+                    mod.ModificationType.Contains("Common Artifact") ||
+                    mod.ModificationType.Contains("Less Common") ||
+                    mod.ModificationType.Contains("Metals") ||
                     mod.ModificationType.Contains("UniProt")).ToList();
 
             //var psms = CSEngine.ReadFilteredPsmTSVShort(@"D:\08-30-22_bottomup\example.psmtsv"); //not being used rn
@@ -75,7 +75,7 @@ namespace TaskLayer.CombinatorialSearchTask
             //Engine instance to get mods mass array for the MassDiffAcceptor, will be later running with .Run()
             List<List<Modification>> listOfModCombinations = new();
 
-            CSExtension.CombinationBuilder(commonBiologicalMods, ref listOfModCombinations, 3, true);
+            CSExtension.CombinationBuilder(commonBiologicalMods, ref listOfModCombinations, 2, true);
 
             CSExtension.BuildCombinationWithAddedMass(listOfModCombinations, out var combinationsWithAddedMass);
 
