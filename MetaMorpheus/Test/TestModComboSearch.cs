@@ -774,7 +774,7 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\08-30-22_bottomup\uniprotkb_accession_A0A0C5B5G6_OR_access_2023_09_01.fasta",
+                @"D:\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,

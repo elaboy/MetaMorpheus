@@ -110,7 +110,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
                 // search
                 new ClassicSearchEngine(allPsmsArray, arrayOfMs2ScansSortedByMass, variableModifications,
-                    fixedModifications,
+                    new List<Modification>(),
                     null, null, null,
                     proteinList, searchMode, combinedParams, this.FileSpecificParameters, null,
                     new List<string>() { taskId, "Individual Spectra Files", dataFileName }, false).Run();
@@ -141,7 +141,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
             var engine = new CSEngine(allPsms
                     .Where(x => x.IsDecoy == false && x.BaseSequence is not null), proteinList, 
-                listOfModCombinations, combinationsWithAddedMass, fixedMods,
+                listOfModCombinations, combinationsWithAddedMass, new List<Modification>(), //changed the fixed mods to treat as variable in test case
                 new CommonParameters(), fileSpecificParameters,
                 new List<string>() { "Combinatorial-Search" });
 

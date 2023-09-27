@@ -686,7 +686,7 @@ namespace TaskLayer
                 //      PsmFromTsv.ParseModifications(psm.FullSequence).Count() >= 2
                 select psm;
 
-            return filteredPsms.Take(40).Distinct();
+            return filteredPsms/*.Take(40)*/.Distinct();
         }
 
         public static void WriteFilteredPsmsToTSVFull(List<PsmFromTsv> filteredPsms, string path)
