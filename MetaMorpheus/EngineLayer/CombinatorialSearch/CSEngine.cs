@@ -11,11 +11,14 @@ using Proteomics.ProteolyticDigestion;
 using MzLibUtil;
 using System.IO;
 using System.Reflection.Metadata.Ecma335;
+using Easy.Common.Interfaces;
+using EngineLayer.Gptmd;
 using FlashLFQ;
 using Microsoft.ML.Transforms;
 using Proteomics.AminoAcidPolymer;
 using ThermoFisher.CommonCore.Data;
 using Peptide = Proteomics.AminoAcidPolymer.Peptide;
+using System.Text.RegularExpressions;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -103,6 +106,47 @@ namespace EngineLayer.CombinatorialSearch
 
                 var modFilter = new List<Modification>();
 
+                foreach (var bestMatchedPeptideFromPsm in psm.BestMatchingPeptides)
+                {
+                    
+                    var peptide = bestMatchedPeptideFromPsm.Peptide;
+
+
+                    //separate matchedFragmentIons and fill true or false for bool arrays
+                    var bBools = new bool[peptide.BaseSequence.Length];
+                    var yBools = new bool[peptide.BaseSequence.Length];
+                    var bIons = new List<MatchedFragmentIon>();
+                    var yIons = new List<MatchedFragmentIon>();
+                    foreach (var ion in psm.MatchedFragmentIons)
+                    {
+                        if (ion.NeutralTheoreticalProduct.ProductType == ProductType.b)
+                            bIons.Add(ion);
+                        else
+                            yIons.Add(ion);
+                    }
+
+                    for (int i = 0; i < bIons.Count; i++)
+                    {
+                        if (bIons.Any(x => x.NeutralTheoreticalProduct.FragmentNumber == i+1))
+                            bBools[i] = true;
+                        else
+                            bBools[i] = false;
+
+                    }
+
+                    for (int i = 0; i < yIons.Count; i++)
+                    {
+                        if (yIons.Any(x => x.NeutralTheoreticalProduct.FragmentNumber == i+ 1))
+                            yBools[i] = true;
+                        else
+                            yBools[i] = false;
+                    }
+
+                    //Check for coverage
+                    int z = 0;
+
+                }
+
                 Tuple<PeptideSpectralMatch, Protein> psmAndProtein = new Tuple<PeptideSpectralMatch, Protein>(
                     psm, ProteinList.Find(x =>
                         x.Accession.Equals(psm.ProteinAccession)));
@@ -121,7 +165,6 @@ namespace EngineLayer.CombinatorialSearch
                     var peptideForDeltaSearchProteinBuild =
                         peptidesResultingFromDigestedProtein.Find(x => x.BaseSequence
                             .Equals(psm.BaseSequence));
-
 
                     var peptideForModifications = new Protein(
                             peptideForDeltaSearchProteinBuild.BaseSequence,
@@ -160,8 +203,7 @@ namespace EngineLayer.CombinatorialSearch
 
                             var matchedVariants =
                                 new List<(PeptideWithSetModifications, List<MatchedFragmentIon>,
-                                    List<MatchedFragmentIon>, List<MatchedFragmentIon>
-                                    )>(); //b matches and y matches
+                                    List<MatchedFragmentIon>, List<MatchedFragmentIon>)>(); //b matches and y matches
 
                             foreach (var variant in moddedPeptide)
                             {
