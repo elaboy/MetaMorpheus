@@ -1,18 +1,15 @@
 ﻿using EngineLayer;
 using EngineLayer.ClassicSearch;
 using EngineLayer.CombinatorialSearch;
+using EngineLayer.FdrAnalysis;
 using MassSpectrometry;
 using Proteomics;
+using Readers;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
-using EngineLayer.FdrAnalysis;
-using Microsoft.ML.Transforms;
-using Proteomics.Fragmentation;
-using Readers;
 using UsefulProteomicsDatabases;
 
 namespace TaskLayer.CombinatorialSearchTask
@@ -140,7 +137,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
 
             var engine = new CSEngine(allPsms
-                    .Where(x => x.IsDecoy == false && x.BaseSequence is not null), proteinList, 
+                    .Where(x => x.IsDecoy == false && x.BaseSequence is not null), proteinList,
                 listOfModCombinations, combinationsWithAddedMass, new List<Modification>(), //changed the fixed mods to treat as variable in test case
                 new CommonParameters(), fileSpecificParameters,
                 new List<string>() { "Combinatorial-Search" });
@@ -151,7 +148,8 @@ namespace TaskLayer.CombinatorialSearchTask
                 proteinList, @"D:\TestingCSTask\testingTasks.xml");
 
             FinishedWritingFile(@"D:\TestingCSTask", new List<string>() { taskId });
-            MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML", false));
+            MyTaskResults.NewDatabases.Add(new DbForTask(@"D:\08-30-22_bottomup\test.mzML",
+                false));
 
             return MyTaskResults;
         }

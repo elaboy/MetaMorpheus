@@ -48,6 +48,19 @@ namespace EngineLayer
         public ChemicalFormula ModsChemicalFormula { get; private set; } // these fields will be null if they are ambiguous
         public string FullSequence { get; private set; }
         public string EssentialSequence { get; private set; }
+
+        public string FullSequenceWithMassShifts
+        {
+            get
+            {
+                return BestMatchingPeptides.FirstOrDefault().Peptide.FullSequenceWithMassShift();
+            }
+            private set
+            {
+
+            }
+        }
+
         public int? Notch { get; private set; }
         public string BaseSequence { get; private set; }
         public int? PeptideLength { get; private set; }

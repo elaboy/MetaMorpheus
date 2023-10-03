@@ -199,6 +199,12 @@ namespace EngineLayer
             s[PsmTsvHeader.BaseSequence] = pepWithModsIsNull ? " " : (psm.BaseSequence ?? Resolve(pepWithModsIsNull ? null : pepsWithMods.Select(b => b.BaseSequence)).ResolvedString);
             s[PsmTsvHeader.FullSequence] = pepWithModsIsNull ? " " : (psm.FullSequence != null ? psm.FullSequence : Resolve(pepWithModsIsNull ? null : pepsWithMods.Select(b => b.FullSequence)).ResolvedString);
             s[PsmTsvHeader.EssentialSequence] = pepWithModsIsNull ? " " : (psm.EssentialSequence != null ? psm.EssentialSequence : Resolve(pepWithModsIsNull ? null : pepsWithMods.Select(b => b.EssentialSequence(ModsToWritePruned))).ResolvedString);
+            s[PsmTsvHeader.FullSequenceWithMassShifts] = pepWithModsIsNull
+                ? " "
+                : (psm.FullSequenceWithMassShifts != null
+                    ? psm.FullSequenceWithMassShifts
+                    : Resolve(pepWithModsIsNull ? null : pepsWithMods.Select(b => b.FullSequenceWithMassShift()))
+                        .ResolvedString);
             string geneString = pepWithModsIsNull ? " " : Resolve(pepsWithMods.Select(b => string.Join(", ", b.Protein.GeneNames.Select(d => $"{d.Item1}:{d.Item2}"))), psm.FullSequence).ResolvedString;
             s[PsmTsvHeader.AmbiguityLevel] = ProteoformLevelClassifier.ClassifyPrSM(s[PsmTsvHeader.FullSequence], geneString);
             s[PsmTsvHeader.PsmCount] = pepWithModsIsNull ? " " : psm.PsmCount.ToString();

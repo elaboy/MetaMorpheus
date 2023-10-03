@@ -3,6 +3,8 @@ using Proteomics;
 using Proteomics.ProteolyticDigestion;
 using Proteomics.RetentionTimePrediction;
 using System.Collections.Generic;
+using BayesianEstimation;
+using Microsoft.ML.Data;
 
 namespace Test
 {
@@ -29,6 +31,16 @@ namespace Test
 
                 Assert.That(expected, Is.EqualTo(actual).Within(0.01));
             }
+        }
+
+        [Test]
+        public void TestChronologerPrediction()
+        {
+            var model = new RTModels(Proteomics.RetentionTimePrediction.Model.Chronologer);
+            model.RTPredictor.eval();
+
+            model.RTPredictor.forward();
+
         }
     }
 }
