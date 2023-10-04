@@ -19,6 +19,7 @@ using Proteomics.AminoAcidPolymer;
 using ThermoFisher.CommonCore.Data;
 using Peptide = Proteomics.AminoAcidPolymer.Peptide;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json.Bson;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -96,11 +97,12 @@ namespace EngineLayer.CombinatorialSearch
             {
                 var network = new GraphObject(psm);
 
-
+                int w = 0;
             }
 
             return new MetaMorpheusEngineResults(this);
         }
+
 
         //protected override MetaMorpheusEngineResults RunSpecific()
         //{

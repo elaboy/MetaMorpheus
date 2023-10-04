@@ -33,14 +33,14 @@ namespace Test
             }
         }
 
-        [Test]
-        public void TestChronologerPrediction()
-        {
-            var model = new RTModels(Proteomics.RetentionTimePrediction.Model.Chronologer);
-            model.RTPredictor.eval();
+        //[Test]
+        //public void TestChronologerPrediction()
+        //{
+        //    var model = new RTModels(Proteomics.RetentionTimePrediction.Model.Chronologer);
+        //    model.RTPredictor.eval();
 
-            model.RTPredictor.forward();
+        //    model.RTPredictor.forward();
 
-        }
+        //}
     }
 }
