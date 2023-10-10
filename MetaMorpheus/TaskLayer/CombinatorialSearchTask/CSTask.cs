@@ -31,7 +31,7 @@ namespace TaskLayer.CombinatorialSearchTask
 
             var mods =
                 Loaders.LoadUnimod(
-                    @"C:\Users\elabo\Documents\GitHub\MetaMorpheus-Fork\MetaMorpheus\EngineLayer\Data\unimod.xml").ToList();
+                    @"C:\Users\Edwin\Documents\GitHub\MetaMorpheus\MetaMorpheus\EngineLayer\Data\unimod.xml").ToList();
 
             var fixedMods = new List<Modification>();
             fixedMods.Add(mods.Find(x => x.IdWithMotif.Equals("Carbamidomethyl on C")));

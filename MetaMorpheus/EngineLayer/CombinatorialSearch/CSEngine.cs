@@ -95,7 +95,8 @@ namespace EngineLayer.CombinatorialSearch
         {
             foreach (var psm in Psms)
             {
-                var deltaMass = psm.BestMatchingPeptides.First().Peptide.MonoisotopicMass - psm.ScanPrecursorMass;
+                var deltaMass = Math.Abs(psm.BestMatchingPeptides.First().Peptide.MonoisotopicMass 
+                                - psm.ScanPrecursorMass);
                 var modsToTry = GetCombinationsThatFitDelta(deltaMass);
                 var network = new GraphObject(psm, modsToTry);
 

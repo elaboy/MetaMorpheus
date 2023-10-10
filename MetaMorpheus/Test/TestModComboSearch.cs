@@ -774,12 +774,12 @@ namespace Test
 
             List<DbForTask> dbForTask = new List<DbForTask>();
             dbForTask.Add(new DbForTask(
-                @"D:\Research\Data\Search_Algorithm\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
+                @"F:\Research\Data\Search_Algorithm\08-30-22_bottomup\uniprotkb_taxonomy_id_9606_AND_reviewed_2023_09_04.fasta",
                 false));
 
             var runner = new EverythingRunnerEngine(taskList,
-                new List<string>() { @"D:\Research\Data\Search_Algorithm\08-30-22_bottomup\test.mzML" },
-                dbForTask, @"D:\TestingCSTask");
+                new List<string>() { @"F:\Research\Data\Search_Algorithm\08-30-22_bottomup\test.mzML" },
+                dbForTask, @"F:\TestingCSTask");
 
             runner.Run();
         }

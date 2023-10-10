@@ -6,7 +6,9 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using System.Security;
 using Easy.Common.Extensions;
+using Microsoft.VisualBasic;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -17,7 +19,8 @@ namespace EngineLayer.CombinatorialSearch
     {
         public ImmutableList<Node> Nodes { get; set; }
         public PeptideSpectralMatch PSM { get; set; }
-        public PeptideWithSetModifications Peptide { get; set; }
+        public PeptideWithSetModifications Peptide { get; set; } // Peptide from initial search match
+        public SwappablePeptideWithSetModifications SwappablePeptide { get; set; } //peptide that will be changing mods
         public List<Product> NterminalProducts { get; set; }
         public List<Product> CterminalProducts { get; set; }
         public string BaseSequence { get; set; }
@@ -43,7 +46,7 @@ namespace EngineLayer.CombinatorialSearch
             // psm.BestMatchingPeptides.First().Peptide.AllModsOneIsNterminus.Clear(); //no mods
             Peptide = psm.BestMatchingPeptides.First().Peptide;
             Modifications = Peptide.AllModsOneIsNterminus;
-
+            BaseSequence = psm.BaseSequence;
             //Sort Products into separate lists
             NterminalProducts = new List<Product>();
             CterminalProducts = new List<Product>();
@@ -62,7 +65,7 @@ namespace EngineLayer.CombinatorialSearch
             TryNewMod();
         }
 
-        private void TryNewMod()
+        private GraphObject TryNewMod()
         {
             foreach (var mod in ModsToTry)
             {
@@ -71,30 +74,69 @@ namespace EngineLayer.CombinatorialSearch
                 //     CleavageSpecificity.Full,
                 //     Peptide.PeptideDescription, Peptide.MissedCleavages, Modifications,
                 //     Peptide.NumFixedMods, Peptide.BaseSequence, Peptide.PairedTargetDecoyHash);
+                var dicts = GetModDictionary(mod);
 
-                var variableModdedPeptides = Peptide.Protein.Digest(Peptide.DigestionParams,
-                    new List<Modification>(), mod);
-
-                foreach (var peptide in variableModdedPeptides)
+                SwappablePeptide = new SwappablePeptideWithSetModifications(Peptide, Peptide.AllModsOneIsNterminus);
+                foreach (var dict in dicts)
                 {
-                    var previousPeptide = Peptide;
-                    var previousScore = this.NetworkCoverage;
-                    var previousMods = this.Modifications;
-                    Peptide = peptide;
+                    SwappablePeptide.SwapDict(dict);
+                    GraphObject previousNetwork = (GraphObject)MemberwiseClone();
+                    Peptide = SwappablePeptide;
                     ResetNodeMatchBoolToFalse();
                     FragmentAndSortNodeProducts();
                     SetMods();
+                    NetworkNterminusIndex = 0;
+                    NetworkCterminusIndex = Nodes.Count;
                     MatchSpectraAndScore();
+                    FixMissedCleavageOnTerminal();
                     CheckEdgeNodes();
 
-                    if (previousScore > NetworkCoverage)
+                    if (previousNetwork.NetworkCoverage < NetworkCoverage)
                     {
-                        Peptide = previousPeptide;
-                        NetworkCoverage = previousScore;
-                        Modifications = previousMods;
+                        return this;
                     }
+
+                    Peptide = previousNetwork.Peptide;
+                    ResetNodeMatchBoolToFalse();
+                    FragmentAndSortNodeProducts();
+                    SetMods();
+                    NetworkNterminusIndex = 0;
+                    NetworkCterminusIndex = Nodes.Count;
+                    MatchSpectraAndScore();
+                    FixMissedCleavageOnTerminal();
+                    CheckEdgeNodes();
                 }
             }
+
+            return this;
+        }
+
+        private IEnumerable<Dictionary<int, Modification>> GetModDictionary(List<Modification> modifications)
+        {
+            var listOfModsDict = new List<Dictionary<int, Modification>>();
+
+            foreach (var mod in ModsToTry)
+            {
+                var moddedPeptide = Peptide.Protein
+                    .Digest(Peptide.DigestionParams,
+                        new List<Modification>(), mod);
+
+                var peptides = moddedPeptide.Select(x => 
+                    x.BaseSequence.Equals(this.BaseSequence) ? x : null);
+
+                var trash = new List<byte>();
+
+
+                foreach (var pep in peptides)
+                {
+                    if(pep is null) continue;
+
+                    listOfModsDict.Add(pep.AllModsOneIsNterminus);
+                }
+                // peptides.ForEach(x => listOfModsDict.Add(x.AllModsOneIsNterminus));
+            }
+
+            return listOfModsDict.Where(x => x.IsNotNullOrEmpty());
         }
 
         private void MatchSpectraAndScore()
@@ -116,6 +158,7 @@ namespace EngineLayer.CombinatorialSearch
                 CterminalProducts,
                 new CommonParameters(), true);
             CterminalProducts.Reverse(); //back to reverse
+
             //Update matched status and sort MatchedFragmentIon to each Node
             foreach (var node in Nodes)
             {
