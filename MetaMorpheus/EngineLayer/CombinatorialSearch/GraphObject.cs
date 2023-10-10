@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using Easy.Common.Extensions;
 
 namespace EngineLayer.CombinatorialSearch
 {
@@ -21,12 +22,13 @@ namespace EngineLayer.CombinatorialSearch
         public List<Product> CterminalProducts { get; set; }
         public string BaseSequence { get; set; }
         public Dictionary<int, Modification> Modifications { get; set; }
+        public List<List<Modification>> ModsToTry { get; set; }
         public int NetworkCterminusIndex { get; set; }
         public int NetworkNterminusIndex { get; set; }
         public double NetworkCoverage { get; set; }
         public List<List<Node>> ConnectedNodes { get; set; } //new list for each fragment
 
-        public GraphObject(PeptideSpectralMatch psm) //todo pass common parameters to feed the experiment specifics such as DissociationType
+        public GraphObject(PeptideSpectralMatch psm, List<List<Modification>> modsToTry) //todo pass common parameters to feed the experiment specifics such as DissociationType
         {
             PSM = psm;
             var nodes = new List<Node>();
@@ -55,11 +57,44 @@ namespace EngineLayer.CombinatorialSearch
             MatchSpectraAndScore();
             FixMissedCleavageOnTerminal();
             CheckEdgeNodes();
+            ModsToTry = modsToTry;
+
+            TryNewMod();
         }
 
-        private void SetModificationDatabase()
+        private void TryNewMod()
         {
+            foreach (var mod in ModsToTry)
+            {
+                // var moddedPeptide = new PeptideWithSetModifications(Peptide.Protein, new DigestionParams(),
+                //     Peptide.OneBasedStartResidueInProtein, Peptide.OneBasedEndResidueInProtein,
+                //     CleavageSpecificity.Full,
+                //     Peptide.PeptideDescription, Peptide.MissedCleavages, Modifications,
+                //     Peptide.NumFixedMods, Peptide.BaseSequence, Peptide.PairedTargetDecoyHash);
 
+                var variableModdedPeptides = Peptide.Protein.Digest(Peptide.DigestionParams,
+                    new List<Modification>(), mod);
+
+                foreach (var peptide in variableModdedPeptides)
+                {
+                    var previousPeptide = Peptide;
+                    var previousScore = this.NetworkCoverage;
+                    var previousMods = this.Modifications;
+                    Peptide = peptide;
+                    ResetNodeMatchBoolToFalse();
+                    FragmentAndSortNodeProducts();
+                    SetMods();
+                    MatchSpectraAndScore();
+                    CheckEdgeNodes();
+
+                    if (previousScore > NetworkCoverage)
+                    {
+                        Peptide = previousPeptide;
+                        NetworkCoverage = previousScore;
+                        Modifications = previousMods;
+                    }
+                }
+            }
         }
 
         private void MatchSpectraAndScore()
@@ -80,7 +115,7 @@ namespace EngineLayer.CombinatorialSearch
                     PSM.ScanPrecursorCharge, PSM.FullFilePath, new CommonParameters()),
                 CterminalProducts,
                 new CommonParameters(), true);
-
+            CterminalProducts.Reverse(); //back to reverse
             //Update matched status and sort MatchedFragmentIon to each Node
             foreach (var node in Nodes)
             {
@@ -192,6 +227,15 @@ namespace EngineLayer.CombinatorialSearch
             }
 
             return false;
+        }
+
+        private void ResetNodeMatchBoolToFalse()
+        {
+            foreach (var node in Nodes)
+            {
+                node.CterminusMatched = false;
+                node.NterminusMatched = false;
+            }
         }
     }
 
