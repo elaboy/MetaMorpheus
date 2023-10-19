@@ -98,9 +98,12 @@ namespace EngineLayer.CombinatorialSearch
                 var deltaMass = Math.Abs(psm.BestMatchingPeptides.First().Peptide.MonoisotopicMass 
                                 - psm.ScanPrecursorMass);
                 var modsToTry = GetCombinationsThatFitDelta(deltaMass);
-                var network = new GraphObject(psm, modsToTry);
+                // var network = new GraphObject(psm, modsToTry);
+                var net = new NodeNetwork(psm, modsToTry);
+                // int w = 0;
+                //var map = new Map(psm, modsToTry, FixedMods);
 
-                int w = 0;
+                int se = 0;
             }
 
             return new MetaMorpheusEngineResults(this);
@@ -467,7 +470,7 @@ namespace EngineLayer.CombinatorialSearch
         /// <returns></returns>
         public List<List<Modification>> GetCombinationsThatFitDelta(double deltaMass)
         {
-            var tolerance = new PpmTolerance(500);
+            var tolerance = new PpmTolerance(20);
 
             //var massArray = CombinationsFromDatabase.OrderBy(x => x.Key).Select(x => x.Key).ToArray();
 

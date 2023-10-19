@@ -35,11 +35,22 @@ namespace EngineLayer.CombinatorialSearch
         {
             PSM = psm;
             var nodes = new List<Node>();
-
-            for (int i = 0; i < psm.BaseSequence.Length; i++)
+            BaseSequence = psm.BaseSequence;
+            for (int i = 0; i < BaseSequence.Length; i++)
             {
-                nodes.Add(new Node(psm.BaseSequence[i], i + 1,
-                    psm.BaseSequence.Length - (i)));
+                if (i == 0)
+                {
+                    nodes.Add(new Node('n', 1, BaseSequence.Length + 1));
+                    continue;
+                }
+
+                nodes.Add(new Node(BaseSequence[i], nodes[i-1].NterminusIndex + 1,
+                    nodes[i-1].CterminusIndex - 1));
+
+                if (i == BaseSequence.Length - 1)
+                {
+                    nodes.Add(new Node('c', BaseSequence.Length + 1, 1));
+                }
             }
 
             Nodes = nodes.ToImmutableList();
@@ -51,18 +62,67 @@ namespace EngineLayer.CombinatorialSearch
             NterminalProducts = new List<Product>();
             CterminalProducts = new List<Product>();
             FragmentAndSortNodeProducts();
-            SetMods();
+            //SetMods();
 
             NetworkNterminusIndex = 0;
             NetworkCterminusIndex = Nodes.Count;
             NetworkCoverage = 0;
 
             MatchSpectraAndScore();
-            FixMissedCleavageOnTerminal();
+            // FixMissedCleavageOnTerminal();
             CheckEdgeNodes();
             ModsToTry = modsToTry;
 
             TryNewMod();
+        }
+        /// <summary>
+        /// for swappable network
+        /// </summary>
+        /// <param name="psm"></param>
+        /// <param name="peptide"></param>
+        /// <param name="modsToTry"></param>
+        public GraphObject(PeptideSpectralMatch psm, SwappablePeptideWithSetModifications peptide,
+            List<List<Modification>> modsToTry) 
+        {
+            PSM = psm;
+            var nodes = new List<Node>();
+            BaseSequence = peptide.BaseSequence;
+            for (int i = 0; i < BaseSequence.Length; i++)
+            {
+                if (i == 0)
+                {
+                    nodes.Add(new Node('n', 1, BaseSequence.Length + 1));
+                    continue;
+                }
+
+                nodes.Add(new Node(BaseSequence[i], nodes[i - 1].NterminusIndex + 1,
+                    nodes[i - 1].CterminusIndex - 1));
+
+                if (i == BaseSequence.Length - 1)
+                {
+                    nodes.Add(new Node('c', BaseSequence.Length + 1, 1));
+                }
+            }
+
+            Nodes = nodes.ToImmutableList();
+            // psm.BestMatchingPeptides.First().Peptide.AllModsOneIsNterminus.Clear(); //no mods
+            Peptide = peptide;
+            Modifications = Peptide.AllModsOneIsNterminus;
+            BaseSequence = Peptide.BaseSequence;
+            //Sort Products into separate lists
+            NterminalProducts = new List<Product>();
+            CterminalProducts = new List<Product>();
+            CSExtension.FragmentAndSortNodeProducts(this);
+            //SetMods();
+
+            NetworkNterminusIndex = 0;
+            NetworkCterminusIndex = Nodes.Count;
+            NetworkCoverage = 0;
+
+            CSExtension.MatchSpectraAndScore(this);
+            // FixMissedCleavageOnTerminal();
+            // CSExtension.CheckEdgeNodes(this);
+            ModsToTry = modsToTry;
         }
 
         private GraphObject TryNewMod()
@@ -80,31 +140,33 @@ namespace EngineLayer.CombinatorialSearch
                 foreach (var dict in dicts)
                 {
                     SwappablePeptide.SwapDict(dict);
-                    GraphObject previousNetwork = (GraphObject)MemberwiseClone();
-                    Peptide = SwappablePeptide;
-                    ResetNodeMatchBoolToFalse();
-                    FragmentAndSortNodeProducts();
-                    SetMods();
-                    NetworkNterminusIndex = 0;
-                    NetworkCterminusIndex = Nodes.Count;
-                    MatchSpectraAndScore();
-                    FixMissedCleavageOnTerminal();
-                    CheckEdgeNodes();
+                    var newModdedNetwork = new GraphObject(PSM, SwappablePeptide, ModsToTry);
 
-                    if (previousNetwork.NetworkCoverage < NetworkCoverage)
+                    // GraphObject previousNetwork = (GraphObject)MemberwiseClone();
+                    // Peptide = SwappablePeptide;
+                    // ResetNodeMatchBoolToFalse();
+                    // FragmentAndSortNodeProducts();
+                    // SetMods();
+                    // NetworkNterminusIndex = 0;
+                    // NetworkCterminusIndex = Nodes.Count;
+                    // MatchSpectraAndScore();
+                    // FixMissedCleavageOnTerminal();
+                    // CheckEdgeNodes();
+
+                    if (newModdedNetwork.NetworkCoverage > NetworkCoverage)
                     {
                         return this;
                     }
-
-                    Peptide = previousNetwork.Peptide;
-                    ResetNodeMatchBoolToFalse();
-                    FragmentAndSortNodeProducts();
-                    SetMods();
-                    NetworkNterminusIndex = 0;
-                    NetworkCterminusIndex = Nodes.Count;
-                    MatchSpectraAndScore();
-                    FixMissedCleavageOnTerminal();
-                    CheckEdgeNodes();
+                    //
+                    // Peptide = previousNetwork.Peptide;
+                    // ResetNodeMatchBoolToFalse();
+                    // FragmentAndSortNodeProducts();
+                    // SetMods();
+                    // NetworkNterminusIndex = 0;
+                    // NetworkCterminusIndex = Nodes.Count;
+                    // MatchSpectraAndScore();
+                    // FixMissedCleavageOnTerminal();
+                    // CheckEdgeNodes();
                 }
             }
 
@@ -212,7 +274,6 @@ namespace EngineLayer.CombinatorialSearch
                 }
                 MatchSpectraAndScore();
             }
-
         }
 
         private void FragmentAndSortNodeProducts()
@@ -222,13 +283,13 @@ namespace EngineLayer.CombinatorialSearch
 
             for (int i = 0; i < NterminalProducts.Count; i++)
             {
-                Nodes[i].NterminusTheoreticalProduct = NterminalProducts[i];
+                Nodes[i+1].NterminusTheoreticalProduct = NterminalProducts[i];
             }
 
             CterminalProducts.Reverse();
             for (int i = 0; i < CterminalProducts.Count; i++)
             {
-                Nodes[i].CterminusTheoreticalProduct = CterminalProducts[i];
+                Nodes[i+1].CterminusTheoreticalProduct = CterminalProducts[i];
             }
         }
 
@@ -236,7 +297,12 @@ namespace EngineLayer.CombinatorialSearch
         {
             foreach (var mod in Modifications)
             {
-                Nodes[mod.Key].Modification = mod.Value;
+                if(mod.Key == 1 || mod.Key == 2)
+                    Nodes[1].Modification.Add(mod.Value);
+                else
+                {
+                    Nodes[mod.Key].Modification.Add(mod.Value);
+                }
             }
         }
         public void MoveInwards()
@@ -294,13 +360,14 @@ namespace EngineLayer.CombinatorialSearch
         public Product NterminusTheoreticalProduct { get; set; }
         public List<MatchedFragmentIon> NterminusFragmentIon { get; set; }
         public List<MatchedFragmentIon> CterminusFragmentIon { get; set; }
-        public Modification Modification { get; set; }
+        public List<Modification> Modification { get; set; }
         public double? EvidencedMZ { get; set; }
         public bool NterminusMatched { get; set; }
         public bool CterminusMatched { get; set; }
         public bool DatabaseEvidence { get; set; }
         public Node(char residue, int nterminus, int cterminus)
         {
+            Modification = new List<Modification>();
             Residue = residue;
             NterminusMatched = false;
             CterminusMatched = false;
