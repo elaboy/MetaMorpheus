@@ -16,6 +16,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Omics.Modifications;
 using Omics;
+using Proteomics.RetentionTimePrediction.Chronologer;
 
 namespace EngineLayer
 {
@@ -392,7 +393,8 @@ namespace EngineLayer
             return psms.Where(p => p.IsDecoy != true && p.FdrInfo.QValue <= 0.01).Select(p => p.ScanPrecursorCharge).GroupBy(n => n).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault();
         }
 
-        public static Dictionary<string, Dictionary<int, Tuple<double, double>>> ComputeHydrophobicityValues(List<SpectralMatch> psms, List<(string fileName, CommonParameters fileSpecificParameters)> fileSpecificParameters, bool computeHydrophobicitiesforModifiedPeptides)
+        public static Dictionary<string, Dictionary<int, Tuple<double, double>>> ComputeHydrophobicityValues(List<SpectralMatch> psms,
+            List<(string fileName, CommonParameters fileSpecificParameters)> fileSpecificParameters, bool computeHydrophobicitiesforModifiedPeptides)
         {
             SSRCalc3 calc = new SSRCalc3("SSRCalc 3.0 (300A)", SSRCalc3.Column.A300);
 
@@ -419,33 +421,39 @@ namespace EngineLayer
                         }
                         fullSequences.Add(pwsm.FullSequence);
 
-                        double predictedHydrophobicity = pwsm is PeptideWithSetModifications pep ?  calc.ScoreSequence(pep) : 0;
+                        // if the mods of the full sequence are not supported, second block. Else first block
+                        var chronologerPredictedHI =
+                            ChronologerEstimator.PredictRetentionTime(pwsm.BaseSequence, pwsm.FullSequence);
+                            
+                        // use the chronologer model to estimate the HI for given full sequence 
+
+                        //double predictedHydrophobicity = pwsm is PeptideWithSetModifications pep ?  calc.ScoreSequence(pep) : 0;
 
                         //here i'm grouping this in 2 minute increments becuase there are cases where you get too few data points to get a good standard deviation an average. This is for stability.
                         int possibleKey = (int)(2 * Math.Round(psm.ScanRetentionTime / 2d, 0));
 
                         //First block of if statement is for modified peptides.
-                        if (pwsm.AllModsOneIsNterminus.Any() && computeHydrophobicitiesforModifiedPeptides)
+                        if (chronologerPredictedHI.HasValue && computeHydrophobicitiesforModifiedPeptides)
                         {
                             if (hydrophobicities.ContainsKey(possibleKey))
                             {
-                                hydrophobicities[possibleKey].Add(predictedHydrophobicity);
+                                hydrophobicities[possibleKey].Add(chronologerPredictedHI.Value);
                             }
                             else
                             {
-                                hydrophobicities.Add(possibleKey, new List<double>() { predictedHydrophobicity });
+                                hydrophobicities.Add(possibleKey, new List<double>() { chronologerPredictedHI.Value});
                             }
                         }
                         //this second block of if statment is for unmodified peptides.
-                        else if (!pwsm.AllModsOneIsNterminus.Any() && !computeHydrophobicitiesforModifiedPeptides)
+                        else if (!chronologerPredictedHI.HasValue && computeHydrophobicitiesforModifiedPeptides)
                         {
                             if (hydrophobicities.ContainsKey(possibleKey))
                             {
-                                hydrophobicities[possibleKey].Add(predictedHydrophobicity);
+                                hydrophobicities[possibleKey].Add(0);
                             }
                             else
                             {
-                                hydrophobicities.Add(possibleKey, new List<double>() { predictedHydrophobicity });
+                                hydrophobicities.Add(possibleKey, new List<double>() { 0 });
                             }
                         }
                     }
