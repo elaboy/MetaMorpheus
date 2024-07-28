@@ -23,10 +23,13 @@
     <PackageReference Include="Microsoft.ML" Version="2.0.0" />
     <PackageReference Include="Microsoft.ML.CpuMath" Version="2.0.0" />
     <PackageReference Include="Microsoft.ML.FastTree" Version="2.0.0" />
-    <PackageReference Include="mzLib" Version="1.6.8" />
+    <PackageReference Include="mzLib" Version="1.6.24" />
     <PackageReference Include="NUnit" Version="3.13.3" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.2.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="TorchSharp" Version="0.102.7" />
+    <PackageReference Include="TorchSharp-cpu" Version="0.102.7" />
   </ItemGroup>
   
   <ItemGroup>
