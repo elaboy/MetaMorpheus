@@ -390,7 +390,11 @@ namespace EngineLayer
 
         public static int GetChargeStateMode(List<SpectralMatch> psms)
         {
-            return psms.Where(p => p.IsDecoy != true && p.FdrInfo.QValue <= 0.01).Select(p => p.ScanPrecursorCharge).GroupBy(n => n).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault();
+            return psms.Where(p => p.IsDecoy != true && p.FdrInfo.QValue <= 0.01)
+                .Select(p => p.ScanPrecursorCharge)
+                .GroupBy(n => n)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key).FirstOrDefault();
         }
 
         public static Dictionary<string, Dictionary<int, Tuple<double, double>>> ComputeHydrophobicityValues(List<SpectralMatch> psms,
@@ -398,10 +402,20 @@ namespace EngineLayer
         {
             SSRCalc3 calc = new SSRCalc3("SSRCalc 3.0 (300A)", SSRCalc3.Column.A300);
 
+            //TODO: method to search in the rt library the sequence
+            
+            // predict all HI before continuing to just retrieve it from the list on the following steps
+
+            List<(string, string)> sequencesToPredict = new List<(string, string)>();
+            sequencesToPredict.AddRange(psms.Select(x => (x.BaseSequence, x.FullSequence)));
+
+            var predictions = ChronologerEstimator.PredictHIBulk(sequencesToPredict);
+
             //TODO change the tuple so the values have names
             Dictionary<string, Dictionary<int, Tuple<double, double>>> rtHydrophobicityAvgDev = new Dictionary<string, Dictionary<int, Tuple<double, double>>>();
 
-            List<string> filenames = fileSpecificParameters.Where(s => s.fileSpecificParameters.SeparationType == "HPLC").Select(s => Path.GetFileName(s.fileName)).ToList();
+            List<string> filenames = fileSpecificParameters.Where(s => s.fileSpecificParameters.SeparationType == "HPLC")
+                .Select(s => Path.GetFileName(s.fileName)).ToList();
 
             filenames = filenames.Distinct().ToList();
 
@@ -410,10 +424,14 @@ namespace EngineLayer
                 Dictionary<int, List<double>> hydrophobicities = new Dictionary<int, List<double>>();
                 Dictionary<int, Tuple<double, double>> averagesCommaStandardDeviations = new Dictionary<int, Tuple<double, double>>();
 
-                foreach (SpectralMatch psm in psms.Where(f => (f.FullFilePath == null || Path.GetFileName(f.FullFilePath) == filename) && f.FdrInfo.QValue <= 0.01 && !f.IsDecoy))
+                var filteredPsms = psms.Where(f =>
+                    (f.FullFilePath == null || Path.GetFileName(f.FullFilePath) == filename) &&
+                    f.FdrInfo.QValue <= 0.01 && !f.IsDecoy).ToList();
+                
+                for (int psmIndex = 0; psmIndex < filteredPsms.Count; psmIndex++)
                 {
                     List<string> fullSequences = new List<string>();
-                    foreach ((int notch, IBioPolymerWithSetMods pwsm) in psm.BestMatchingBioPolymersWithSetMods)
+                    foreach ((int notch, IBioPolymerWithSetMods pwsm) in filteredPsms[psmIndex].BestMatchingBioPolymersWithSetMods)
                     {
                         if (fullSequences.Contains(pwsm.FullSequence))
                         {
@@ -422,15 +440,14 @@ namespace EngineLayer
                         fullSequences.Add(pwsm.FullSequence);
 
                         // if the mods of the full sequence are not supported, second block. Else first block
-                        var chronologerPredictedHI =
-                            ChronologerEstimator.PredictRetentionTime(pwsm.BaseSequence, pwsm.FullSequence);
+                        var chronologerPredictedHI = predictions[psmIndex];
                             
                         // use the chronologer model to estimate the HI for given full sequence 
 
                         //double predictedHydrophobicity = pwsm is PeptideWithSetModifications pep ?  calc.ScoreSequence(pep) : 0;
 
                         //here i'm grouping this in 2 minute increments becuase there are cases where you get too few data points to get a good standard deviation an average. This is for stability.
-                        int possibleKey = (int)(2 * Math.Round(psm.ScanRetentionTime / 2d, 0));
+                        int possibleKey = (int)(2 * Math.Round(filteredPsms[psmIndex].ScanRetentionTime / 2d, 0));
 
                         //First block of if statement is for modified peptides.
                         if (chronologerPredictedHI.HasValue && computeHydrophobicitiesforModifiedPeptides)
@@ -449,11 +466,11 @@ namespace EngineLayer
                         {
                             if (hydrophobicities.ContainsKey(possibleKey))
                             {
-                                hydrophobicities[possibleKey].Add(0);
+                                hydrophobicities[possibleKey].Add(ChronologerEstimator.PredictHIFromBaseSequence(pwsm.BaseSequence));
                             }
                             else
                             {
-                                hydrophobicities.Add(possibleKey, new List<double>() { 0 });
+                                hydrophobicities.Add(possibleKey, new List<double>(){ ChronologerEstimator.PredictHIFromBaseSequence(pwsm.BaseSequence) });
                             }
                         }
                     }

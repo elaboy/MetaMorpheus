@@ -24,7 +24,7 @@
     <PackageReference Include="Microsoft.ML.CpuMath" Version="2.0.0" />
     <PackageReference Include="Microsoft.ML.FastTree" Version="2.0.0" />
     <PackageReference Include="Microsoft.NETCore.App" Version="2.2.8" />
-    <PackageReference Include="mzLib" Version="1.6.24" />
+    <PackageReference Include="mzLib" Version="1.1.3" />
     <PackageReference Include="Nett" Version="0.15.0" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
   </ItemGroup>
